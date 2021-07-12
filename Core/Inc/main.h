@@ -40,6 +40,8 @@ extern "C" {
 #include "stm32f4xx_ll_tim.h"
 #include "stm32f4xx_ll_gpio.h"
 
+#include <math.h>
+
 #if defined(USE_FULL_ASSERT)
 #include "stm32_assert.h"
 #endif /* USE_FULL_ASSERT */
@@ -94,6 +96,37 @@ void Error_Handler(void);
 #endif
 /* USER CODE BEGIN Private defines */
 
+#define PERIOD_TIME 		(uint32_t) 1000000
+#define	BUFFER_SIZE			(uint8_t)8
+
+extern uint8_t TxBuffer[BUFFER_SIZE];
+extern uint8_t numberOfPulses;
+
+typedef enum
+{
+	TSTD = 0,
+	MDIV,
+	HSA,
+	APL_0,
+	APL_1,
+	TCS,
+	FRS,
+	FUND,
+	ART,
+	MSBF,
+	ABS_0,
+	ABS_1,
+	LTCH_0,
+	LTCH_1
+
+}STPMC1_address;
+
+typedef enum
+{
+	temporary = 0,
+	permanent
+
+}WritingMode;
 
 /* USER CODE END Private defines */
 

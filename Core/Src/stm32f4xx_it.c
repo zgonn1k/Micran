@@ -1,24 +1,4 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file    stm32f4xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
@@ -43,8 +23,10 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 
-/* USER CODE END PV */
 
+
+/* USER CODE END PV */
+//uint8_t TXBuffer[BUFFER_SIZE] = {1,0,0,1,1,0,0,1};
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
 
@@ -198,6 +180,35 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles TIM4 global interrupt.
+  */
+void TIM4_IRQHandler(void)
+{
+	TIM4->SR &= ~TIM_SR_UIF;
+	numberOfPulses++;
+
+	if(numberOfPulses == 9)
+	{
+		numberOfPulses = 0;
+		TIM4->CR1 &= ~TIM_CR1_CEN;
+	}
+
+
+	if(TxBuffer[numberOfPulses - 1] == 0)
+	{
+		LL_GPIO_ResetOutputPin(GPIOD, LL_GPIO_PIN_14);
+	}
+	else
+	{
+		LL_GPIO_SetOutputPin(GPIOD, LL_GPIO_PIN_14);
+	}
+
+
+
+
+}
 
 /* USER CODE BEGIN 1 */
 
