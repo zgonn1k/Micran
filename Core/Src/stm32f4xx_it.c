@@ -26,7 +26,7 @@
 
 
 /* USER CODE END PV */
-//uint8_t TXBuffer[BUFFER_SIZE] = {1,0,0,1,1,0,0,1};
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
 
@@ -182,34 +182,52 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles TIM4 global interrupt.
+  * @brief This function handles TIM2 global interrupt.
   */
-void TIM4_IRQHandler(void)
+void TIM2_IRQHandler(void)
 {
-	TIM4->SR &= ~TIM_SR_UIF;
+	TIM2->SR &= ~TIM_SR_UIF;
 	numberOfPulses++;
 
-	if(numberOfPulses == 9)
+	sprintf(UART_TxBuffer, "Number of pulses %d", numberOfPulses);
+	SendString(UART_TxBuffer);
+
+	if (numberOfPulses == 9)
 	{
+		byteSent = 1;
 		numberOfPulses = 0;
-		TIM4->CR1 &= ~TIM_CR1_CEN;
+		TIM2->CR1 &= ~TIM_CR1_CEN;
+		SendString("\r\n");
+		NVIC_DisableIRQ(TIM2_IRQn);
 	}
 
-
-	if(TxBuffer[numberOfPulses - 1] == 0)
-	{
-		LL_GPIO_ResetOutputPin(GPIOD, LL_GPIO_PIN_14);
-	}
 	else
 	{
-		LL_GPIO_SetOutputPin(GPIOD, LL_GPIO_PIN_14);
+
+		if (TxBuffer[BUFFER_SIZE - numberOfPulses] == 0)
+		{
+			LL_GPIO_ResetOutputPin(GPIOD, LL_GPIO_PIN_14);
+			SendString(" 0\r\n");
+		}
+		else
+		{
+			LL_GPIO_SetOutputPin(GPIOD, LL_GPIO_PIN_14);
+			SendString(" 1\r\n");
+		}
 	}
-
-
-
 
 }
 
+void TIM7_IRQHandler(void)
+{
+	currTick++;
+	TIM7->SR &= ~TIM_SR_UIF;
+}
+
+void USART2_IRQHandler(void)
+{
+
+}
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
