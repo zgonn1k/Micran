@@ -206,12 +206,12 @@ void TIM2_IRQHandler(void)
 
 		if (TxBuffer[BUFFER_SIZE - numberOfPulses] == 0)
 		{
-			LL_GPIO_ResetOutputPin(GPIOD, LL_GPIO_PIN_14);
+			LL_GPIO_ResetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
 			SendString(" 0\r\n");
 		}
 		else
 		{
-			LL_GPIO_SetOutputPin(GPIOD, LL_GPIO_PIN_14);
+			LL_GPIO_SetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
 			SendString(" 1\r\n");
 		}
 	}

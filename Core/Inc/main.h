@@ -101,11 +101,13 @@ void SendString(char array[]);
 
 #define PERIOD_TIME 		(uint32_t)1000000
 #define	BUFFER_SIZE			(uint8_t)8
+#define MAX_PHASES			3
+#define DATA_SIZE			28
+uint8_t 			numberOfPulses;
 
 extern uint8_t		TxBuffer[BUFFER_SIZE];
-uint8_t 		numberOfPulses;
 extern uint32_t 	currTick;
-extern char		UART_TxBuffer[256];
+extern char			UART_TxBuffer[256];
 extern uint8_t 		byteSent;
 typedef enum
 {
@@ -159,6 +161,61 @@ typedef enum
 
 }WritingMode;
 
+typedef struct
+{
+	uint32_t 	  dataRegister[DATA_SIZE];
+
+	int32_t       powerActive;            // three-phase power
+	int32_t       powerActiveFund;
+	int32_t       powerReactive;
+	int32_t		  momVoltage[MAX_PHASES];
+	int32_t		  momCurrent[MAX_PHASES];
+	uint32_t      rmsVoltage[MAX_PHASES];
+	uint32_t      rmsCurrent[MAX_PHASES];
+	uint32_t 	  configBits[4];
+
+}Data_t;
+
+typedef struct
+{
+	uint32_t old; /* previous energy value - 32 bits */
+	uint16_t quot; /* quant/16 - 16 bits */
+	int16_t quant; /* new - old, measure of power - 16 bits */
+	int32_t frac; /* fractional part of energy integrator -	 32 bits */
+	int32_t integ; /* integer part of energy integrator - 32 bits */
+} ENERG_t;
+
+typedef struct
+{
+	uint32_t DAP;
+	uint32_t DRP;
+	uint32_t DFP;
+	uint32_t PRD;
+	uint32_t DMR;
+	uint32_t DMS;
+	uint32_t DMT;
+	uint32_t DMN;
+	uint32_t DER;
+	uint32_t DES;
+	uint32_t DET;
+	uint32_t DEN;
+	uint32_t DAR;
+	uint32_t DAS;
+	uint32_t DAT;
+	uint32_t CF0;
+	uint32_t DRR;
+	uint32_t DRS;
+	uint32_t DRT;
+	uint32_t CF1;
+	uint32_t DFR;
+	uint32_t DFS;
+	uint32_t DFT;
+	uint32_t CF2;
+	uint32_t ACR;
+	uint32_t ACS;
+	uint32_t ACT;
+	uint32_t CF3;
+} DataRegister_t;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

@@ -5,15 +5,15 @@ void SystemClock_Config(void);
 void TIM4_CH2_PWM_Init(void);
 void TIM2_CH1_PWM_Init(void);
 void TIM7_Init(void);
-void Delay_us(uint32_t time);
-static void MX_GPIO_Init(void);
-static void MX_SPI1_Init(void);
+void usDelay(uint32_t time);
 void Writing_To_STPMC1(WritingMode mode);
+void Reading_From_STPMC1(Data_t *data);
 void Send_Byte(STPMC1_cfg_bits_address, uint8_t bitState);
 void Set_Pins_For_Writing_Mode(void);
 void Reset_Pins_For_Writing_Mode(void);
 static void MX_USART2_UART_Init(void);
-
+static void MX_GPIO_Init(void);
+static void MX_SPI1_Init(void);
 
 
 #define  PERIOD_VALUE		(uint32_t)(20 - 1)  /* Period Value  */
@@ -25,13 +25,16 @@ uint8_t  TxBuffer[BUFFER_SIZE];
 uint8_t  byteSent;
 char	 UART_TxBuffer[256];
 
+uint8_t SPI_RxBuffer;
 
+Data_t data;
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
+
 
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 
@@ -51,8 +54,19 @@ int main(void)
 	TIM4_CH2_PWM_Init();
 
 	Writing_To_STPMC1(temporary);
+
+
+
 	while (1)
 	{
+/*
+		while(!(SPI1->SR & SPI_SR_RXNE));
+
+		SPI_RxBuffer = LL_SPI_ReceiveData8(SPI1);
+
+		sprintf(UART_TxBuffer, "%d\r\n", SPI_RxBuffer);
+		SendString(UART_TxBuffer);
+		*/
 /*
 		LL_GPIO_TogglePin(GPIOD, LL_GPIO_PIN_15);
 		LL_mDelay(500);
@@ -138,7 +152,7 @@ static void MX_SPI1_Init(void)
 	SPI_InitStruct.ClockPolarity = LL_SPI_POLARITY_HIGH;
 	SPI_InitStruct.ClockPhase = LL_SPI_PHASE_1EDGE;
 	SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
-	SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV4;
+	SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV4;    /* 21MBits/s */
 	SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
 	SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
 	SPI_InitStruct.CRCPoly = 10;
@@ -201,15 +215,8 @@ void Writing_To_STPMC1(WritingMode mode)
 	Set_Pins_For_Writing_Mode(); 	/*2. MISO, SCLK and SS as output */
 	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);	/*3. pin SYN to '1' */
 	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin); /*4. activate SCS, then SYN */
-
-	/*
-	 *then Delay function > 30ns
-	 */
-	Delay_us(1);
-
-	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);
-
-	/*5. activate SCL */
+	usDelay(1);	/*then Delay function > 30ns*/
+	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);	/*activate SYN*/
 
 	if(mode == temporary)
 	{
@@ -220,34 +227,102 @@ void Writing_To_STPMC1(WritingMode mode)
 		Send_Byte(RD, 0);
 	}
 
-	Send_Byte(LTCH_1, 1);
-	SendString("First byte sent\r\n");
-	Send_Byte(APL_0, 1);
-	SendString("Second byte sent\r\n");
-	Send_Byte(FRS, 0);
-	SendString("Third byte sent\r\n");
-	Send_Byte(FUND, 1);
-	SendString("Fourth byte sent\r\n");
-	Send_Byte(ART, 0);
-	SendString("Fifth byte sent\r\n");
-	Send_Byte(MDIV, 1);
-	SendString("Sixth byte sent\r\n");
+	Send_Byte(TSTD, 0);		/*enable test modes and system signals*/
+	SendString("1st byte sent\r\n");
 
-	/*4. deactivate SYN, then SCS*/
-	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
-		/*
-		 *then Delay function > 30ns
-		 */
-	Delay_us(1);
+	Send_Byte(MDIV, 1);	/*fMCLK = fXTAL1*/
+	SendString("2nd byte sent\r\n");
+
+	Send_Byte(HSA, 0);	/*fCLK = fXTAL1/4,*/
+	SendString("3rd byte sent\r\n");
+
+	Send_Byte(APL_0, 0);
+	SendString("4th byte sent\r\n");
+	Send_Byte(APL_1, 0); /*APL = 0: peripheral MOP, MON=ZCR, WatchDOG, LED=pulses (X)*/
+	SendString("5th byte sent\r\n");
+
+	Send_Byte(TCS, 1);	/*Current transformer (CT) or shunt*/
+	SendString("6th byte sent\r\n");
+
+	Send_Byte(FRS, 0);	/*Nominal base frequency 50Hz*/
+	SendString("7th byte sent\r\n");
+
+	Send_Byte(FUND, 0);	/*full bandwidth active energy controls the stepper;
+						  full bandwidth reactive energy computation.*/
+	SendString("8th byte sent\r\n");
+
+	Send_Byte(ART, 0);	/*natural computation*/
+	SendString("9th byte sent\r\n");
+
+	Send_Byte(MSBF, 0);	/*msb first*/
+	SendString("10th byte sent\r\n");
+
+	Send_Byte(ABS_0, 0);
+	SendString("11th byte sent\r\n");
+	Send_Byte(ABS_1, 0);	/*LTCH=0: 0,00125 * FS,*/
+	SendString("12th byte sent\r\n");
+
+
+
+
+	Send_Byte(SYS_0, 1);
+	SendString("17th byte sent\r\n");
+	Send_Byte(SYS_1, 1);
+	SendString("18th byte sent\r\n");
+	Send_Byte(SYS_2, 1);	/*SYS=7: 1-phase, 2-wire __TN, 1-system __T_*/
+	SendString("19th byte sent\r\n");
+
+	Send_Byte(PM, 1);	/*Class 0.1*/
+	SendString("21th byte sent\r\n");
+
+	Send_Byte(FR1, 0);	/*fMCLK =8.192 MHz*/
+	SendString("21th byte sent\r\n");
+
+
+
+	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin); /* deactivate SYN, then SCS*/
+	usDelay(1);	/*then Delay function > 30ns*/
+	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin); /*deactivate SCS*/
+	Reset_Pins_For_Writing_Mode();
+	LL_SPI_Enable(SPI1);
+}
+
+void Reading_From_STPMC1(Data_t *data)
+{
+	uint8_t i;
+	uint8_t j;
+
+	LL_SPI_Disable(SPI1);
 
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
-
-	Reset_Pins_For_Writing_Mode();
-
+	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	usDelay(5);
+	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	usDelay(1);
+	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	usDelay(1);
+	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	usDelay(1);
+	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	usDelay(1);
 	LL_SPI_Enable(SPI1);
 
+	for (i = 0; i < DATA_SIZE; i++)
+	{
+		for (j = 0; j < 4; j++)
+		{
+			while (LL_SPI_IsActiveFlag_RXNE(SPI1));
+			data->dataRegister[i] = (LL_SPI_ReceiveData8(SPI1) << (3-j) * 8);
+		}
+	}
 
+	LL_SPI_Disable(SPI1);
 
+	for(uint8_t i = 0; i < 28; i++)
+	{
+		sprintf(UART_TxBuffer, "Value from first register %lu", data->dataRegister[i]);
+		SendString(UART_TxBuffer);
+	}
 }
 
 static void MX_USART2_UART_Init(void)
@@ -390,7 +465,7 @@ void TIM7_Init(void)
 
 
 
-void Delay_us(uint32_t Delay)
+void usDelay(uint32_t Delay)
 {
 	TIM7->CR1 |= TIM_CR1_CEN;
 	currTick = 0;
