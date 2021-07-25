@@ -72,6 +72,7 @@ extern "C" {
 void Error_Handler(void);
 void SendChar(uint8_t data);
 void SendString(char array[]);
+
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
@@ -81,8 +82,8 @@ void SendString(char array[]);
 #define SPI1_SCK_GPIO_Port 		GPIOA
 #define SPI1_MISO_Pin 			LL_GPIO_PIN_6
 #define SPI1_MISO_GPIO_Port 	GPIOA
-#define SYN_Pin 				LL_GPIO_PIN_7
-#define SYN_GPIO_Port 			GPIOA
+#define SYN_Pin 				LL_GPIO_PIN_4
+#define SYN_GPIO_Port 			GPIOC
 #define SPI1_SS_Pin 			LL_GPIO_PIN_4
 #define SPI1_SS_GPIO_Port 		GPIOA
 #ifndef NVIC_PRIORITYGROUP_0
@@ -99,11 +100,32 @@ void SendString(char array[]);
 #endif
 /* USER CODE BEGIN Private defines */
 
-#define PERIOD_TIME 		(uint32_t)1000000
-#define	BUFFER_SIZE			(uint8_t)8
-#define MAX_PHASES			3
-#define DATA_SIZE			28
+#define PERIOD_TIME 			(uint32_t)1000000
+#define	BUFFER_SIZE				(uint8_t)8
+#define MAX_PHASES				3
+#define DATA_SIZE				28
+
+#define VOLTAGE_VALUES_MASK		(uint32_t)0x0FFF0000
+#define CURRENT_VALUES_MASK		(uint32_t)0x0000FFFF
+#define ENERGY_MASK				(uint32_t)0x0FFFFF00
+#define CFG_MASK				(uint32_t)0x0FFFFFFF
+#define PERIOD_VALUE			(uint32_t)(20 - 1) 				    /* Period Value  */
+#define PAUSE_VALUE				(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
+#define PRESCALER_VALUE			(uint16_t)83
+
+#define PHASE_R					0
+#define PHASE_S					1
+#define PHASE_T					2
+#define PHASE_N					3
+
+#define VOLTAGE					(uint8_t)0
+#define CURRENT					(uint8_t)1
+
+#define MOMENTARY				(uint8_t)0
+#define RMS					 	(uint8_t)1
+
 uint8_t 			numberOfPulses;
+uint32_t 	  		dataRegister[DATA_SIZE];
 
 extern uint8_t		TxBuffer[BUFFER_SIZE];
 extern uint32_t 	currTick;
@@ -161,10 +183,40 @@ typedef enum
 
 }WritingMode;
 
+typedef enum
+{
+	DAP = 0,
+	DRP,
+	DFP,
+	PRD,
+	DMR,
+	DMS,
+	DMT,
+	DMN,
+	DER,
+	DES,
+	DET,
+	DEN,
+	DAR,
+	DAS,
+	DAT,
+	CF0,
+	DRR,
+	DRS,
+	DRT,
+	CF1,
+	DFR,
+	DFS,
+	DFT,
+	CF2,
+	ACR,
+	ACS,
+	ACT,
+	CF3
+}Number_Of_Register_t;
+
 typedef struct
 {
-	uint32_t 	  dataRegister[DATA_SIZE];
-
 	int32_t       powerActive;            // three-phase power
 	int32_t       powerActiveFund;
 	int32_t       powerReactive;
@@ -172,9 +224,10 @@ typedef struct
 	int32_t		  momCurrent[MAX_PHASES];
 	uint32_t      rmsVoltage[MAX_PHASES];
 	uint32_t      rmsCurrent[MAX_PHASES];
+	uint32_t	  period;
 	uint32_t 	  configBits[4];
-
 }Data_t;
+
 
 typedef struct
 {
@@ -187,35 +240,29 @@ typedef struct
 
 typedef struct
 {
-	uint32_t DAP;
-	uint32_t DRP;
-	uint32_t DFP;
-	uint32_t PRD;
-	uint32_t DMR;
-	uint32_t DMS;
-	uint32_t DMT;
-	uint32_t DMN;
-	uint32_t DER;
-	uint32_t DES;
-	uint32_t DET;
-	uint32_t DEN;
-	uint32_t DAR;
-	uint32_t DAS;
-	uint32_t DAT;
-	uint32_t CF0;
-	uint32_t DRR;
-	uint32_t DRS;
-	uint32_t DRT;
-	uint32_t CF1;
-	uint32_t DFR;
-	uint32_t DFS;
-	uint32_t DFT;
-	uint32_t CF2;
-	uint32_t ACR;
-	uint32_t ACS;
-	uint32_t ACT;
-	uint32_t CF3;
-} DataRegister_t;
+	uint32_t R1;
+	uint32_t R2;
+	float 	 Ks;
+	float 	 Ai;
+	float 	 Ku;
+	float 	 Ki;
+	float 	 Kisum;
+	float 	 Au;
+	uint32_t len_i;
+	uint32_t len_u;
+	uint32_t len_isum;
+	float	 Kint_comp;
+	uint32_t Fm;
+	uint32_t Kut;
+	float Vref;
+} Parameters_t;
+
+typedef struct
+{
+	uint32_t x_i;   /*CurrentRegisterValue*/
+	uint32_t x_u;	/*VoltageRegisterValue;*/
+	uint32_t x_period;
+} Current_Values_t;
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

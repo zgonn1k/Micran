@@ -6,35 +6,36 @@ void TIM4_CH2_PWM_Init(void);
 void TIM2_CH1_PWM_Init(void);
 void TIM7_Init(void);
 void usDelay(uint32_t time);
-void Writing_To_STPMC1(WritingMode mode);
-void Reading_From_STPMC1(Data_t *data);
+void STPMC1_Writing(WritingMode mode);
+void STPMC1_Reading(Data_t *data);
 void Send_Byte(STPMC1_cfg_bits_address, uint8_t bitState);
-void Set_Pins_For_Writing_Mode(void);
-void Reset_Pins_For_Writing_Mode(void);
+void Writing_Mode_Enable(void);
+void Writing_Mode_Disable(void);
+void Data_Init(Data_t *Data);
+float GetMomVoltage(uint8_t phase);
+float GetMomCurrent(uint8_t phase);
+float GetRMSVoltage(uint8_t phase);
+float GetRMSCurrent(uint8_t phase);
+float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data);
 static void MX_USART2_UART_Init(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
-
-
-#define  PERIOD_VALUE		(uint32_t)(20 - 1)  /* Period Value  */
-#define  PAUSE_VALUE		(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
-#define  PRESCALER_VALUE	(uint16_t)83
+static void MX_DMA_Init(void);
 
 uint32_t currTick;
 uint8_t  TxBuffer[BUFFER_SIZE];
 uint8_t  byteSent;
 char	 UART_TxBuffer[256];
 
-uint8_t SPI_RxBuffer;
+Data_t Data;
+Parameters_t Parameters;
 
-Data_t data;
 /**
   * @brief  The application entry point.
   * @retval int
   */
 int main(void)
 {
-
 
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 
@@ -49,17 +50,27 @@ int main(void)
 	MX_SPI1_Init();
 	MX_USART2_UART_Init();
 	TIM7_Init();
-
+	MX_DMA_Init();
 	TIM2_CH1_PWM_Init();
 	TIM4_CH2_PWM_Init();
 
-	Writing_To_STPMC1(temporary);
+	STPMC1_Writing(temporary);
 
 
 
 	while (1)
 	{
-/*
+		STPMC1_Reading(&Data);
+		Data_Init(&Data);
+
+		GetMomCurrent(PHASE_T);
+		GetMomCurrent(PHASE_T);
+		GetRMSVoltage(PHASE_T);
+		GetRMSCurrent(PHASE_T);
+
+		LL_mDelay(100);
+
+		/*
 		while(!(SPI1->SR & SPI_SR_RXNE));
 
 		SPI_RxBuffer = LL_SPI_ReceiveData8(SPI1);
@@ -158,8 +169,33 @@ static void MX_SPI1_Init(void)
 	SPI_InitStruct.CRCPoly = 10;
 	LL_SPI_Init(SPI1, &SPI_InitStruct);
 	LL_SPI_SetStandard(SPI1, LL_SPI_PROTOCOL_MOTOROLA);
+
+
+	LL_DMA_SetChannelSelection(DMA2, LL_DMA_STREAM_0, LL_DMA_CHANNEL_3);
+	LL_DMA_SetDataTransferDirection(DMA2, LL_DMA_STREAM_0, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+	LL_DMA_SetStreamPriorityLevel(DMA2, LL_DMA_STREAM_0, LL_DMA_PRIORITY_HIGH);
+	LL_DMA_SetMode(DMA2, LL_DMA_STREAM_0, LL_DMA_MODE_NORMAL);
+	LL_DMA_SetPeriphIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_PERIPH_NOINCREMENT);
+	LL_DMA_SetMemoryIncMode(DMA2, LL_DMA_STREAM_0, LL_DMA_MEMORY_INCREMENT);
+	LL_DMA_SetPeriphSize(DMA2, LL_DMA_STREAM_0, LL_DMA_PDATAALIGN_BYTE);
+	LL_DMA_SetMemorySize(DMA2, LL_DMA_STREAM_0, LL_DMA_MDATAALIGN_BYTE);
+	LL_DMA_DisableFifoMode(DMA2, LL_DMA_STREAM_0);
 }
 
+
+static void MX_DMA_Init(void)
+{
+
+  /* Init with LL driver */
+  /* DMA controller clock enable */
+  LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_DMA2);
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  NVIC_SetPriority(DMA2_Stream0_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
+  NVIC_EnableIRQ(DMA2_Stream0_IRQn);
+
+}
 
 /**
   * @brief GPIO Initialization Function
@@ -186,7 +222,7 @@ static void MX_GPIO_Init(void)
 	/**/
 	GPIO_InitStruct.Pin = SYN_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
-	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	LL_GPIO_Init(SYN_GPIO_Port, &GPIO_InitStruct);
@@ -194,28 +230,29 @@ static void MX_GPIO_Init(void)
 	/**/
 	GPIO_InitStruct.Pin = SPI1_SS_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
-	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	LL_GPIO_Init(SPI1_SS_GPIO_Port, &GPIO_InitStruct);
 
 	GPIO_InitStruct.Pin = LL_GPIO_PIN_15 | LL_GPIO_PIN_14 | LL_GPIO_PIN_12;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
-	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	LL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
 /* USER CODE BEGIN 4 */
-void Writing_To_STPMC1(WritingMode mode)
+void STPMC1_Writing(WritingMode mode)
 {
 
 	LL_SPI_Disable(SPI1);	/*1. disable SPI */
-	Set_Pins_For_Writing_Mode(); 	/*2. MISO, SCLK and SS as output */
+	Writing_Mode_Enable(); 	/*2. MISO, SCLK and SS as output */
+	usDelay(1000);
 	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);	/*3. pin SYN to '1' */
 	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin); /*4. activate SCS, then SYN */
-	usDelay(1);	/*then Delay function > 30ns*/
+	usDelay(5);	/*then Delay function > 30ns*/
 	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);	/*activate SYN*/
 
 	if(mode == temporary)
@@ -283,11 +320,11 @@ void Writing_To_STPMC1(WritingMode mode)
 	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin); /* deactivate SYN, then SCS*/
 	usDelay(1);	/*then Delay function > 30ns*/
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin); /*deactivate SCS*/
-	Reset_Pins_For_Writing_Mode();
+	Writing_Mode_Disable();
 	LL_SPI_Enable(SPI1);
 }
 
-void Reading_From_STPMC1(Data_t *data)
+void STPMC1_Reading(Data_t *Data)
 {
 	uint8_t i;
 	uint8_t j;
@@ -296,7 +333,7 @@ void Reading_From_STPMC1(Data_t *data)
 
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
 	LL_GPIO_ResetOutputPin(SYN_GPIO_Port, SYN_Pin);
-	usDelay(5);
+	usDelay(50);
 	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
 	usDelay(1);
 	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
@@ -312,18 +349,40 @@ void Reading_From_STPMC1(Data_t *data)
 		for (j = 0; j < 4; j++)
 		{
 			while (LL_SPI_IsActiveFlag_RXNE(SPI1));
-			data->dataRegister[i] = (LL_SPI_ReceiveData8(SPI1) << (3-j) * 8);
+			dataRegister[i] = (LL_SPI_ReceiveData8(SPI1) << (3-j) * 8);
 		}
 	}
 
 	LL_SPI_Disable(SPI1);
 
-	for(uint8_t i = 0; i < 28; i++)
+	for(uint8_t i = 0; i < DATA_SIZE; i++)
 	{
-		sprintf(UART_TxBuffer, "Value from first register %lu", data->dataRegister[i]);
+		sprintf(UART_TxBuffer, "Value from first register %lu", dataRegister[i]);
 		SendString(UART_TxBuffer);
 	}
+
+
 }
+
+
+void Data_Init(Data_t *Data)
+{
+	Data->momVoltage[PHASE_R] = (int32_t) (dataRegister[DMR]&VOLTAGE_VALUES_MASK) >> 16;
+	Data->momVoltage[PHASE_S] = (int32_t) (dataRegister[DMS]&VOLTAGE_VALUES_MASK) >> 16;
+	Data->momVoltage[PHASE_T] = (int32_t) (dataRegister[DMT]&VOLTAGE_VALUES_MASK) >> 16;
+
+	Data->momCurrent[PHASE_R] = (int32_t) (dataRegister[DMR]&CURRENT_VALUES_MASK);
+	Data->momCurrent[PHASE_S] = (int32_t) (dataRegister[DMS]&CURRENT_VALUES_MASK);
+	Data->momCurrent[PHASE_T] = (int32_t) (dataRegister[DMT]&CURRENT_VALUES_MASK);
+
+	Data->period = (uint32_t) (dataRegister[PRD]&VOLTAGE_VALUES_MASK) >> 16;
+
+	Data->configBits[0] = (uint32_t) (dataRegister[CF0]&CFG_MASK);
+	Data->configBits[1] = (uint32_t) (dataRegister[CF1]&CFG_MASK);
+	Data->configBits[2] = (uint32_t) (dataRegister[CF2]&CFG_MASK);
+	Data->configBits[3] = (uint32_t) (dataRegister[CF3]&CFG_MASK);
+}
+
 
 static void MX_USART2_UART_Init(void)
 {
@@ -385,7 +444,6 @@ void Send_Byte(STPMC1_cfg_bits_address address, uint8_t bitState)
 	{
 		TxBuffer[i] = decimal % 2;
 		decimal = decimal / 2;
-		//binary = binary + TxBuffer[i] * pow(10, i); //variable for binary number as integer
 	}
 
 	TxBuffer[BUFFER_SIZE - 1] = bitState;
@@ -403,7 +461,7 @@ void Send_Byte(STPMC1_cfg_bits_address address, uint8_t bitState)
 }
 
 
-void Set_Pins_For_Writing_Mode(void)
+void Writing_Mode_Enable(void)
 {
 	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
 
@@ -419,15 +477,17 @@ void Set_Pins_For_Writing_Mode(void)
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
 	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-
-
 	/*SCK pin as PWM*/
 	GPIOA->AFR[0] |= GPIO_AFRL_AFRL5_0; 	/*TIM2 CH1 for PA5*/
 	GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL5_1 | GPIO_AFRL_AFRL5_2 | GPIO_AFRL_AFRL5_3);
 	GPIOA->MODER |= GPIO_MODER_MODER5_1; 	/*Alternate function mode*/
+
+	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	LL_GPIO_SetOutputPin(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin);
 }
 
-void Reset_Pins_For_Writing_Mode(void)
+void Writing_Mode_Disable(void)
 {
 	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
 
@@ -445,6 +505,10 @@ void Reset_Pins_For_Writing_Mode(void)
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
 	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+
 
 }
 
@@ -564,7 +628,205 @@ void SendString(char array[])
         SendChar(array[i]);
 }
 
+void STPMC1_Init(void)
+{
+	Parameters.R1 = 100000;
+	Parameters.R2 = 470;
+	Parameters.Ku = 0.9375;
+	Parameters.Ki = 0.9375;
+	Parameters.Kisum = 0.875;
+	Parameters.Au = 4;
+	Parameters.len_i = 65536;
+	Parameters.len_u = 4096;
+	Parameters.len_isum = 4096;
+	Parameters.Kint_comp = 1.004;
+	Parameters.Fm = 4000000;
+	Parameters.Kut = 2;
+	Parameters.Vref = 1.23;
+}
 
+float GetMomVoltage(uint8_t phase)
+{
+	float momVoltage;
+
+	switch (phase)
+	{
+		case PHASE_R:
+		{
+			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_R, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_S:
+		{
+			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_S, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_T:
+		{
+			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_T, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_N:
+		{
+			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_N, &Parameters, &Data);
+		}
+		break;
+	}
+	return momVoltage;
+}
+
+float GetMomCurrent(uint8_t phase)
+{
+	float momCurrent;
+
+	switch (phase)
+	{
+		case PHASE_R:
+		{
+			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_R, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_S:
+		{
+			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_S, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_T:
+		{
+			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_T, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_N:
+		{
+			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_N, &Parameters, &Data);
+		}
+		break;
+	}
+	return momCurrent;
+}
+
+float GetRMSVoltage(uint8_t phase)
+{
+	float RMSVoltage;
+
+	switch (phase)
+	{
+		case PHASE_R:
+		{
+			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_R, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_S:
+		{
+			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_S, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_T:
+		{
+			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_T, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_N:
+		{
+			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_N, &Parameters, &Data);
+		}
+		break;
+	}
+	return RMSVoltage;
+}
+
+float GetRMSCurrent(uint8_t phase)
+{
+	float RMSCurrent;
+
+	switch (phase)
+	{
+		case PHASE_R:
+		{
+			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_R, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_S:
+		{
+			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_S, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_T:
+		{
+			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_T, &Parameters, &Data);
+		}
+		break;
+
+		case PHASE_N:
+		{
+			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_N, &Parameters, &Data);
+		}
+		break;
+	}
+	return RMSCurrent;
+}
+
+float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data)
+{
+	float actualValue;
+	float Kint = 2 * Data->period * 32 / (3.14159 * 65536);
+	float Kdif = 1 / (2 * Kint);
+	int32_t x_u;
+	int32_t x_i;
+
+	switch (elecParam)
+	{
+	case VOLTAGE:
+	{
+		float Kdspu = Kdif * Kint;
+
+		if(type == MOMENTARY)
+		{
+			x_u = Data->momVoltage[phase];
+		}
+		else
+		{
+			x_u = Data->rmsVoltage[phase];
+		}
+		actualValue = (1 + Parameters->R1 / Parameters->R2)
+				* x_u * Parameters->Vref
+				/ (Parameters->Kut * Parameters->Ku * Parameters->Au
+						* Parameters->len_u * Parameters->Kint_comp * Kdspu);
+	}
+		break;
+	case CURRENT:
+	{
+		float Kdspi = Kdif;
+
+		if(type == MOMENTARY)
+				{
+					x_i = Data->momCurrent[phase];
+				}
+				else
+				{
+					x_i = Data->rmsCurrent[phase];
+				}
+
+		actualValue = x_i * Parameters->Vref
+				/ (Parameters->Ks * Parameters->Ki * Parameters->Ai
+						* Parameters->len_i * Kint * Parameters->Kint_comp
+						* Kdspi);
+	}
+		break;
+	}
+	return actualValue;
+}
 
 
 /**
@@ -581,22 +843,3 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
-/**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
-void assert_failed(uint8_t *file, uint32_t line)
-{
-  /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
-}
-#endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
