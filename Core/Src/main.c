@@ -11,11 +11,11 @@ void STPMC1_Reading(Data_t *data);
 void Send_Byte(STPMC1_cfg_bits_address, uint8_t bitState);
 void Writing_Mode_Enable(void);
 void Writing_Mode_Disable(void);
-void Data_Init(Data_t *Data);
-float GetMomVoltage(uint8_t phase);
-float GetMomCurrent(uint8_t phase);
-float GetRMSVoltage(uint8_t phase);
-float GetRMSCurrent(uint8_t phase);
+void STPMC1_Data_Init(Data_t *Data);
+float STPMC1_GetMomVoltage(uint8_t phase);
+float STPMC1_GetMomCurrent(uint8_t phase);
+float STPMC1_GetRMSVoltage(uint8_t phase);
+float STPMC1_GetRMSCurrent(uint8_t phase);
 float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data);
 static void MX_USART2_UART_Init(void);
 static void MX_GPIO_Init(void);
@@ -37,6 +37,7 @@ Parameters_t Parameters;
 int main(void)
 {
 
+
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 
 	LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
@@ -56,17 +57,25 @@ int main(void)
 
 	STPMC1_Writing(temporary);
 
-
+	LL_mDelay(100);
 
 	while (1)
 	{
 		STPMC1_Reading(&Data);
-		Data_Init(&Data);
+		STPMC1_Data_Init(&Data);
 
-		GetMomCurrent(PHASE_T);
-		GetMomCurrent(PHASE_T);
-		GetRMSVoltage(PHASE_T);
-		GetRMSCurrent(PHASE_T);
+
+		sprintf(UART_TxBuffer, "Mom Voltage = %lf\r\n", STPMC1_GetMomVoltage(PHASE_T)); // @suppress("Float formatting support")
+				SendString(UART_TxBuffer);
+
+		sprintf(UART_TxBuffer, "Mom Current = %lf\r\n", STPMC1_GetMomCurrent(PHASE_T));	// @suppress("Float formatting support")
+						SendString(UART_TxBuffer);
+
+		sprintf(UART_TxBuffer, "RMS Voltage = %lf\r\n", STPMC1_GetRMSVoltage(PHASE_T));	// @suppress("Float formatting support")
+						SendString(UART_TxBuffer);
+
+		sprintf(UART_TxBuffer, "RMS Current = %lf\r\n", STPMC1_GetRMSCurrent(PHASE_T));	// @suppress("Float formatting support")
+						SendString(UART_TxBuffer);
 
 		LL_mDelay(100);
 
@@ -75,8 +84,7 @@ int main(void)
 
 		SPI_RxBuffer = LL_SPI_ReceiveData8(SPI1);
 
-		sprintf(UART_TxBuffer, "%d\r\n", SPI_RxBuffer);
-		SendString(UART_TxBuffer);
+
 		*/
 /*
 		LL_GPIO_TogglePin(GPIOD, LL_GPIO_PIN_15);
@@ -326,9 +334,10 @@ void STPMC1_Writing(WritingMode mode)
 
 void STPMC1_Reading(Data_t *Data)
 {
+
 	uint8_t i;
 	uint8_t j;
-
+	uint8_t SPI1_RxBuffer[DATA_SIZE * 4];
 	LL_SPI_Disable(SPI1);
 
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
@@ -343,6 +352,9 @@ void STPMC1_Reading(Data_t *Data)
 	LL_GPIO_SetOutputPin(SYN_GPIO_Port, SYN_Pin);
 	usDelay(1);
 	LL_SPI_Enable(SPI1);
+
+
+	LL_SPI_ReceiveData8(SPI1);
 
 	for (i = 0; i < DATA_SIZE; i++)
 	{
@@ -365,7 +377,7 @@ void STPMC1_Reading(Data_t *Data)
 }
 
 
-void Data_Init(Data_t *Data)
+void STPMC1_Data_Init(Data_t *Data)
 {
 	Data->momVoltage[PHASE_R] = (int32_t) (dataRegister[DMR]&VOLTAGE_VALUES_MASK) >> 16;
 	Data->momVoltage[PHASE_S] = (int32_t) (dataRegister[DMS]&VOLTAGE_VALUES_MASK) >> 16;
@@ -381,6 +393,8 @@ void Data_Init(Data_t *Data)
 	Data->configBits[1] = (uint32_t) (dataRegister[CF1]&CFG_MASK);
 	Data->configBits[2] = (uint32_t) (dataRegister[CF2]&CFG_MASK);
 	Data->configBits[3] = (uint32_t) (dataRegister[CF3]&CFG_MASK);
+
+	Data->powerActive = (uint32_t) (dataRegister[DAP]);
 }
 
 
@@ -645,7 +659,7 @@ void STPMC1_Init(void)
 	Parameters.Vref = 1.23;
 }
 
-float GetMomVoltage(uint8_t phase)
+float STPMC1_GetMomVoltage(uint8_t phase)
 {
 	float momVoltage;
 
@@ -678,7 +692,7 @@ float GetMomVoltage(uint8_t phase)
 	return momVoltage;
 }
 
-float GetMomCurrent(uint8_t phase)
+float STPMC1_GetMomCurrent(uint8_t phase)
 {
 	float momCurrent;
 
@@ -711,7 +725,7 @@ float GetMomCurrent(uint8_t phase)
 	return momCurrent;
 }
 
-float GetRMSVoltage(uint8_t phase)
+float STPMC1_GetRMSVoltage(uint8_t phase)
 {
 	float RMSVoltage;
 
@@ -744,7 +758,7 @@ float GetRMSVoltage(uint8_t phase)
 	return RMSVoltage;
 }
 
-float GetRMSCurrent(uint8_t phase)
+float STPMC1_GetRMSCurrent(uint8_t phase)
 {
 	float RMSCurrent;
 
