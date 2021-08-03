@@ -29,7 +29,7 @@ char	 UART_TxBuffer[256];
 
 Data_t Data;
 Parameters_t Parameters;
-
+ActualValue_t ActualValue;
 /**
   * @brief  The application entry point.
   * @retval int
@@ -65,19 +65,20 @@ int main(void)
 		STPMC1_Data_Init(&Data);
 
 
-		sprintf(UART_TxBuffer, "Mom Voltage = %lf\r\n", STPMC1_GetMomVoltage(PHASE_T)); // @suppress("Float formatting support")
+
+		sprintf(UART_TxBuffer, "DC (reg) = %u\r\n", Data.DC);
 				SendString(UART_TxBuffer);
 
-		sprintf(UART_TxBuffer, "Mom Current = %lf\r\n", STPMC1_GetMomCurrent(PHASE_T));	// @suppress("Float formatting support")
+		sprintf(UART_TxBuffer, "Mom Current = %f\r\n", STPMC1_GetMomCurrent(PHASE_T));
 						SendString(UART_TxBuffer);
 
-		sprintf(UART_TxBuffer, "RMS Voltage = %lf\r\n", STPMC1_GetRMSVoltage(PHASE_T));	// @suppress("Float formatting support")
+		sprintf(UART_TxBuffer, "RMS Voltage = %f\r\n", STPMC1_GetRMSVoltage(PHASE_T));
 						SendString(UART_TxBuffer);
 
-		sprintf(UART_TxBuffer, "RMS Current = %lf\r\n", STPMC1_GetRMSCurrent(PHASE_T));	// @suppress("Float formatting support")
+		sprintf(UART_TxBuffer, "RMS Current = %f\r\n", STPMC1_GetRMSCurrent(PHASE_T));
 						SendString(UART_TxBuffer);
 
-		LL_mDelay(100);
+		LL_mDelay(500);
 
 		/*
 		while(!(SPI1->SR & SPI_SR_RXNE));
@@ -360,8 +361,8 @@ void STPMC1_Reading(Data_t *Data)
 	{
 		for (j = 0; j < 4; j++)
 		{
-			while (LL_SPI_IsActiveFlag_RXNE(SPI1));
-			dataRegister[i] = (LL_SPI_ReceiveData8(SPI1) << (3-j) * 8);
+			while (!(LL_SPI_IsActiveFlag_RXNE(SPI1)));
+			dataRegister[i] = dataRegister[i] | (LL_SPI_ReceiveData8(SPI1) << (3-j) * 8);
 		}
 	}
 
@@ -394,7 +395,7 @@ void STPMC1_Data_Init(Data_t *Data)
 	Data->configBits[2] = (uint32_t) (dataRegister[CF2]&CFG_MASK);
 	Data->configBits[3] = (uint32_t) (dataRegister[CF3]&CFG_MASK);
 
-	Data->powerActive = (uint32_t) (dataRegister[DAP]);
+	Data->DC = (uint32_t) (dataRegister[PRD]&DC_VALUES_MASK);
 }
 
 
@@ -794,18 +795,25 @@ float STPMC1_GetRMSCurrent(uint8_t phase)
 float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data)
 {
 	float actualValue;
-	float Kint = 2 * Data->period * 32 / (3.14159 * 65536);
-	float Kdif = 1 / (2 * Kint);
+	float Kint;
+	float Kdif;
 	int32_t x_u;
 	int32_t x_i;
 
+	Kint = 2 * Data->period * 32 / (3.14159 * 65536);
+
+	if (Kint == 0)
+		return 0;
+
+	Kdif = 1 / (2 * Kint);
+
 	switch (elecParam)
 	{
-	case VOLTAGE:
+	case VOLTAGE :
 	{
 		float Kdspu = Kdif * Kint;
 
-		if(type == MOMENTARY)
+		if (type == MOMENTARY)
 		{
 			x_u = Data->momVoltage[phase];
 		}
@@ -813,24 +821,24 @@ float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Pa
 		{
 			x_u = Data->rmsVoltage[phase];
 		}
-		actualValue = (1 + Parameters->R1 / Parameters->R2)
-				* x_u * Parameters->Vref
+		actualValue = (1 + Parameters->R1 / Parameters->R2) * x_u
+				* Parameters->Vref
 				/ (Parameters->Kut * Parameters->Ku * Parameters->Au
 						* Parameters->len_u * Parameters->Kint_comp * Kdspu);
 	}
 		break;
-	case CURRENT:
+	case CURRENT :
 	{
 		float Kdspi = Kdif;
 
-		if(type == MOMENTARY)
-				{
-					x_i = Data->momCurrent[phase];
-				}
-				else
-				{
-					x_i = Data->rmsCurrent[phase];
-				}
+		if (type == MOMENTARY)
+		{
+			x_i = Data->momCurrent[phase];
+		}
+		else
+		{
+			x_i = Data->rmsCurrent[phase];
+		}
 
 		actualValue = x_i * Parameters->Vref
 				/ (Parameters->Ks * Parameters->Ki * Parameters->Ai
@@ -840,6 +848,7 @@ float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Pa
 		break;
 	}
 	return actualValue;
+
 }
 
 

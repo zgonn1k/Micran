@@ -109,6 +109,7 @@ void SendString(char array[]);
 #define CURRENT_VALUES_MASK		(uint32_t)0x0000FFFF
 #define ENERGY_MASK				(uint32_t)0x0FFFFF00
 #define CFG_MASK				(uint32_t)0x0FFFFFFF
+#define DC_VALUES_MASK			(uint32_t)0x0000FFFF
 #define PERIOD_VALUE			(uint32_t)(20 - 1) 				    /* Period Value  */
 #define PAUSE_VALUE				(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
 #define PRESCALER_VALUE			(uint16_t)83
@@ -225,8 +226,23 @@ typedef struct
 	uint32_t      rmsVoltage[MAX_PHASES];
 	uint32_t      rmsCurrent[MAX_PHASES];
 	uint32_t	  period;
+	uint32_t	  DC;
 	uint32_t 	  configBits[4];
 }Data_t;
+
+typedef struct
+{
+	float       powerActive;
+	float       powerActiveFund;
+	float       powerReactive;
+	float		momVoltage[MAX_PHASES];
+	float		momCurrent[MAX_PHASES];
+	float       rmsVoltage[MAX_PHASES];
+	float       rmsCurrent[MAX_PHASES];
+	float		DC;
+	float		period;
+
+}ActualValue_t;
 
 
 typedef struct
