@@ -189,17 +189,14 @@ void TIM2_IRQHandler(void)
 	TIM2->SR &= ~TIM_SR_UIF;
 	numberOfPulses++;
 
-	//sprintf(UART_TxBuffer, "Number of pulses %d", numberOfPulses);
-	//SendString(UART_TxBuffer);
-
 	if (numberOfPulses == 9)
 	{
 		TIM2->CR1 &= ~TIM_CR1_CEN;
+		NVIC_DisableIRQ(TIM2_IRQn);
 		byteSent = 1;
 		numberOfPulses = 0;
-	//	SendString("\r\n");
-		LL_GPIO_ResetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
-		NVIC_DisableIRQ(TIM2_IRQn);
+
+
 	}
 
 	else
@@ -208,23 +205,22 @@ void TIM2_IRQHandler(void)
 		if (TxBuffer[BUFFER_SIZE - numberOfPulses] == 0)
 		{
 			LL_GPIO_ResetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
-			//SendString(" 0\r\n");
 		}
 		else
 		{
 			LL_GPIO_SetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
-			//SendString(" 1\r\n");
 		}
 	}
 
 }
 
+/*
 void TIM7_IRQHandler(void)
 {
 	currTick++;
 	TIM7->SR &= ~TIM_SR_UIF;
 }
-
+*/
 void USART2_IRQHandler(void)
 {
 

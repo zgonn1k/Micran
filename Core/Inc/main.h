@@ -69,9 +69,9 @@ extern "C" {
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
-void Error_Handler(void);
-void SendChar(uint8_t data);
-void SendString(char array[]);
+
+
+
 
 /* USER CODE BEGIN EFP */
 
@@ -82,10 +82,11 @@ void SendString(char array[]);
 #define SPI1_SCK_GPIO_Port 		GPIOA
 #define SPI1_MISO_Pin 			LL_GPIO_PIN_6
 #define SPI1_MISO_GPIO_Port 	GPIOA
-#define SYN_Pin 				LL_GPIO_PIN_4
-#define SYN_GPIO_Port 			GPIOC
+#define SPI1_SYN_Pin 			LL_GPIO_PIN_4
+#define SPI1_SYN_GPIO_Port 		GPIOC
 #define SPI1_SS_Pin 			LL_GPIO_PIN_4
 #define SPI1_SS_GPIO_Port 		GPIOA
+
 #ifndef NVIC_PRIORITYGROUP_0
 #define NVIC_PRIORITYGROUP_0         ((uint32_t)0x00000007) /*!< 0 bit  for pre-emption priority,
                                                                  4 bits for subpriority */
@@ -104,12 +105,12 @@ void SendString(char array[]);
 #define	BUFFER_SIZE				(uint8_t)8
 #define MAX_PHASES				3
 #define DATA_SIZE				28
+#define fMCLK					8000000
 
 #define VOLTAGE_VALUES_MASK		(uint32_t)0x0FFF0000
 #define CURRENT_VALUES_MASK		(uint32_t)0x0000FFFF
 #define ENERGY_MASK				(uint32_t)0x0FFFFF00
 #define CFG_MASK				(uint32_t)0x0FFFFFFF
-#define DC_VALUES_MASK			(uint32_t)0x0000FFFF
 #define PERIOD_VALUE			(uint32_t)(20 - 1) 				    /* Period Value  */
 #define PAUSE_VALUE				(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
 #define PRESCALER_VALUE			(uint16_t)83
@@ -125,11 +126,13 @@ void SendString(char array[]);
 #define MOMENTARY				(uint8_t)0
 #define RMS					 	(uint8_t)1
 
+#define TIME_BETWEEN_TX			10000
+
+
+
 uint8_t 			numberOfPulses;
 uint32_t 	  		dataRegister[DATA_SIZE];
-
 extern uint8_t		TxBuffer[BUFFER_SIZE];
-extern uint32_t 	currTick;
 extern char			UART_TxBuffer[256];
 extern uint8_t 		byteSent;
 typedef enum
@@ -175,7 +178,7 @@ typedef enum
 	RD,
 	WE,
 	Precharge
-}STPMC1_cfg_bits_address;
+}STPMC1_Config_Bit;
 
 typedef enum
 {
@@ -218,16 +221,16 @@ typedef enum
 
 typedef struct
 {
-	int32_t       powerActive;            // three-phase power
-	int32_t       powerActiveFund;
-	int32_t       powerReactive;
-	int32_t		  momVoltage[MAX_PHASES];
-	int32_t		  momCurrent[MAX_PHASES];
-	uint32_t      rmsVoltage[MAX_PHASES];
-	uint32_t      rmsCurrent[MAX_PHASES];
-	uint32_t	  period;
-	uint32_t	  DC;
-	uint32_t 	  configBits[4];
+	uint32_t       powerActive;
+	uint32_t       powerActiveFund;
+	uint32_t       powerReactive;
+	uint32_t       momVoltage[MAX_PHASES];
+	uint32_t	   momCurrent[MAX_PHASES];
+	uint32_t       rmsVoltage[MAX_PHASES];
+	uint32_t       rmsCurrent[MAX_PHASES];
+	uint32_t	   period;
+	uint32_t 	   DC;
+	uint32_t 	   configBits[4];
 }Data_t;
 
 typedef struct
@@ -243,16 +246,6 @@ typedef struct
 	float		period;
 
 }ActualValue_t;
-
-
-typedef struct
-{
-	uint32_t old; /* previous energy value - 32 bits */
-	uint16_t quot; /* quant/16 - 16 bits */
-	int16_t quant; /* new - old, measure of power - 16 bits */
-	int32_t frac; /* fractional part of energy integrator -	 32 bits */
-	int32_t integ; /* integer part of energy integrator - 32 bits */
-} ENERG_t;
 
 typedef struct
 {
@@ -271,15 +264,30 @@ typedef struct
 	uint32_t Fm;
 	uint32_t Kut;
 	float Vref;
+	float Kdiv;
 } Parameters_t;
 
-typedef struct
-{
-	uint32_t x_i;   /*CurrentRegisterValue*/
-	uint32_t x_u;	/*VoltageRegisterValue;*/
-	uint32_t x_period;
-} Current_Values_t;
-/* USER CODE END Private defines */
+
+void SystemClock_Config(void);
+void TIM4_CH2_PWM_Init(void);
+void TIM2_CH1_PWM_Init(void);
+void TIM7_Init(void);
+void usDelay(uint32_t time);
+void STPMC1_Writing(WritingMode mode);
+void STPMC1_Reading(Data_t *const Data, uint32_t *pRxBuffer);
+void STPMC1_SendByte(STPMC1_Config_Bit, uint8_t bitState);
+void Writing_Mode_Enable(void);
+void Writing_Mode_Disable(void);
+void STPMC1_DataUnpacking(Data_t *const Data);
+void STPMC1_Init(void);
+float STPMC1_GetMomVoltage(uint8_t phase);
+float STPMC1_GetMomCurrent(uint8_t phase);
+float STPMC1_GetRMSVoltage(uint8_t phase);
+float STPMC1_GetRMSCurrent(uint8_t phase);
+float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data);
+void Error_Handler(void);
+void SendChar(uint8_t data);
+void SendString(char array[]);
 
 #ifdef __cplusplus
 }
