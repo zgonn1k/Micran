@@ -1,38 +1,29 @@
-/*
- * STPMC1.h
- *
- *  Created on: Jul 25, 2021
- *      Author: vladz
- */
-
 #ifndef INC_STPMC1_H_
 #define INC_STPMC1_H_
 
 #include "main.h"
 
-#define VOLTAGE_VALUES_MASK		(uint32_t)0x0FFF0000
-#define CURRENT_VALUES_MASK		(uint32_t)0x0000FFFF
-#define ENERGY_MASK				(uint32_t)0x0FFFFF00
-#define CFG_MASK				(uint32_t)0x0FFFFFFF
-#define PERIOD_VALUE			(uint32_t)(20 - 1) 				    /* Period Value  */
-#define PAUSE_VALUE				(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
-#define PRESCALER_VALUE			(uint16_t)83
+#define VOLTAGE_MASK		(uint32_t)0x0FFF0000
+#define CURRENT_MASK		(uint32_t)0x0000FFFF
+#define ENERGY_MASK			(uint32_t)0x0FFFFF00
+#define CFG_MASK			(uint32_t)0x0FFFFFFF
+#define PERIOD_VALUE		(uint32_t)(20 - 1) 				    /* Period Value  */
+#define PAUSE_VALUE			(uint32_t)(PERIOD_VALUE / 2)        /* Capture Compare  Value  */
+#define PRESCALER_VALUE		(uint16_t)83
 
-#define PHASE_R					0
-#define PHASE_S					1
-#define PHASE_T					2
-#define PHASE_N					3
-#define MAX_PHASES				3
+#define PHASE_R				0
+#define PHASE_S				1
+#define PHASE_T				2
+#define PHASE_N				3
+#define MAX_PHASES			3
 
-#define VOLTAGE					(uint8_t)0
-#define CURRENT					(uint8_t)1
+#define MOMENTARY			(uint8_t)0
+#define RMS					(uint8_t)1
 
-#define MOMENTARY				(uint8_t)0
-#define RMS					 	(uint8_t)1
+#define TIME_BETWEEN_TX		10000
+#define STPMC1_RX_BUF_SIZE	112
 
-#define TIME_BETWEEN_TX			10000
-
-typedef enum
+enum stpmc1_config_bit
 {
 	TSTD = 0,
 	MDIV,
@@ -75,14 +66,14 @@ typedef enum
 	RD,
 	WE,
 	Precharge
-}STPMC1_Config_Bit;
+};
 
-typedef enum
+enum writing_mode
 {
 	temporary = 0,
 	permanent
 
-}WritingMode;
+};
 
 typedef enum
 {
@@ -116,7 +107,7 @@ typedef enum
 	CF3
 }Number_Of_Register_t;
 
-typedef struct
+struct stpmc1_data
 {
 	uint32_t       powerActive;
 	uint32_t       powerActiveFund;
@@ -128,23 +119,9 @@ typedef struct
 	uint32_t	   period;
 	uint32_t 	   DC;
 	uint32_t 	   configBits[4];
-}Data_t;
+};
 
-typedef struct
-{
-	float       powerActive;
-	float       powerActiveFund;
-	float       powerReactive;
-	float		momVoltage[MAX_PHASES];
-	float		momCurrent[MAX_PHASES];
-	float       rmsVoltage[MAX_PHASES];
-	float       rmsCurrent[MAX_PHASES];
-	float		DC;
-	float		period;
-
-}ActualValue_t;
-
-typedef struct
+struct stpmc1_param
 {
 	uint32_t R1;
 	uint32_t R2;
@@ -162,19 +139,18 @@ typedef struct
 	uint32_t Kut;
 	float Vref;
 	float Kdiv;
-} Parameters_t;
+	float Kint;
+	float Kdif;
+};
 
 
-void STPMC1_DataUnpacking(Data_t *const Data);
-void STPMC1_Init(void);
-float STPMC1_GetMomVoltage(uint8_t phase);
-float STPMC1_GetMomCurrent(uint8_t phase);
-float STPMC1_GetRMSVoltage(uint8_t phase);
-float STPMC1_GetRMSCurrent(uint8_t phase);
-float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data);
-void STPMC1_Writing(WritingMode mode);
-void STPMC1_Reading(Data_t *const Data, uint32_t *pRxBuffer);
-void STPMC1_SendByte(STPMC1_Config_Bit, uint8_t bitState);
-ErrorStatus IsParityBad(uint8_t *bp, uint8_t);
+void stpmc1_write(enum writing_mode mode);
+ErrorStatus stpmc1_read(uint32_t *data_buffer);
+void stpmc1_data_unpacking(struct stpmc1_data *data, uint32_t *data_buffer);
+void stpmc1_init(struct stpmc1_param *const param);
+float stpmc1_get_voltage(struct stpmc1_data const * const data,
+						 struct stpmc1_param const * const param, uint8_t type, uint8_t phase);
+float stpmc1_get_current(struct stpmc1_data const * const data,
+						 struct stpmc1_param const * const param, uint8_t type, uint8_t phase);
 
 #endif /* INC_STPMC1_H_ */

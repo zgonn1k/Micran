@@ -187,14 +187,14 @@ void SysTick_Handler(void)
 void TIM2_IRQHandler(void)
 {
 	TIM2->SR &= ~TIM_SR_UIF;
-	numberOfPulses++;
+	number_of_pulses++;
 
-	if (numberOfPulses == 9)
+	if (number_of_pulses == 9)
 	{
 		TIM2->CR1 &= ~TIM_CR1_CEN;
 		NVIC_DisableIRQ(TIM2_IRQn);
-		byteSent = 1;
-		numberOfPulses = 0;
+		byte_sent_flag = 1;
+		number_of_pulses = 0;
 
 
 	}
@@ -202,7 +202,7 @@ void TIM2_IRQHandler(void)
 	else
 	{
 
-		if (TxBuffer[BUFFER_SIZE - numberOfPulses] == 0)
+		if (spi_tx_buffer[BUFFER_SIZE - number_of_pulses] == 0)
 		{
 			LL_GPIO_ResetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
 		}

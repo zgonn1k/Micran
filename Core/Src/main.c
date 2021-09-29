@@ -1,23 +1,18 @@
 
 #include "main.h"
 
-
 static void MX_USART2_UART_Init(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI1_Init(void);
-static void MX_DMA_Init(void);
 
-int __io_putchar(int ch);
-
-uint8_t  TxBuffer[BUFFER_SIZE];
-uint8_t  byteSent;
+volatile uint8_t  spi_tx_buffer[BUFFER_SIZE];
+volatile uint8_t  byte_sent_flag;
 char	 UART_TxBuffer[256];
-uint8_t  dataRegister_8bit[112];
-uint32_t dataRegister[DATA_SIZE];
+uint32_t stpmc1_data_buffer[DATA_SIZE];
 
-Data_t STPMC1_Data;
-Parameters_t Parameters;
-ActualValue_t ActualValue;
+struct stpmc1_data stpmc1_data;
+struct stpmc1_param stpmc1_param;
+
 
 
 /**
@@ -37,23 +32,25 @@ int main(void)
 	MX_GPIO_Init();
 	MX_SPI1_Init();
 	MX_USART2_UART_Init();
-	MX_DMA_Init();
+	//MX_DMA_Init();
 	TIM7_Init();
 	TIM2_CH1_PWM_Init();
 	TIM4_CH2_PWM_Init();
 
-	STPMC1_Init();
-	STPMC1_Writing(temporary);
+
+	stpmc1_init(&stpmc1_param);
+	stpmc1_write(temporary);
 
 	LL_mDelay(100);
 
 	while (1)
 	{
-		STPMC1_Reading(&Data, dataRegister);
-		STPMC1_DataUnpacking(&Data);
+		stpmc1_read(stpmc1_data_buffer);
+		stpmc1_data_unpacking(&stpmc1_data, stpmc1_data_buffer);
 
-		ActualValue.momVoltage[PHASE_R] = STPMC1_GetMomVoltage(PHASE_R);
-		ActualValue.rmsVoltage[PHASE_R] = STPMC1_GetRMSVoltage(PHASE_R);
+		stpmc1_get_voltage(&stpmc1_data, &stpmc1_param, RMS, PHASE_R);
+		stpmc1_get_voltage(&stpmc1_data, &stpmc1_param, MOMENTARY, PHASE_R);
+
 		LL_mDelay(100);
 	}
 }
@@ -142,7 +139,21 @@ static void MX_SPI1_Init(void)
 
 }
 
+ErrorStatus spi_read_rx(SPI_TypeDef *spi, uint8_t *spi_rx_buffer, uint16_t rx_len)
+{
+	LL_SPI_Enable(spi);
 
+	for (uint8_t i = 0; i < rx_len; i++)
+	{
+		while (!(LL_SPI_IsActiveFlag_RXNE(spi)));
+		spi_rx_buffer[i] = LL_SPI_ReceiveData8(spi);
+	}
+	LL_SPI_Disable(SPI1);
+
+	return SUCCESS;
+}
+
+/*
 static void MX_DMA_Init(void)
 {
 
@@ -176,6 +187,7 @@ static void MX_DMA_Init(void)
   * @param None
   * @retval None
   */
+
 static void MX_GPIO_Init(void)
 {
 	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
@@ -185,8 +197,6 @@ static void MX_GPIO_Init(void)
 	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOC);
 	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD);
 
-	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
-	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
 
 	GPIO_InitStruct.Pin = SPI1_SYN_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
@@ -208,6 +218,10 @@ static void MX_GPIO_Init(void)
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	LL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+
 }
 
 
@@ -364,208 +378,9 @@ void SendString(char array[])
         SendChar(array[i]);
 }
 
-void STPMC1_Init(void)
-{
-	Parameters.R1 = 100000;
-	Parameters.R2 = 470;
-	Parameters.Ku = 0.9375;
-	Parameters.Ki = 0.9375;
-	Parameters.Kisum = 0.875;
-	Parameters.Au = 16;
-	Parameters.len_i = 65536;
-	Parameters.len_u = 4096;
-	Parameters.len_isum = 4096;
-	Parameters.Kint_comp = 1.004;
-	Parameters.Fm = 4000000;
-	Parameters.Kut = 2;
-	Parameters.Vref = 1.23;
-	Parameters.Kdiv = (1 + Parameters.R1 / Parameters.R2);
-}
-
-float STPMC1_GetMomVoltage(uint8_t phase)
-{
-	float momVoltage;
-
-	switch (phase)
-	{
-		case PHASE_R:
-		{
-			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_R, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_S:
-		{
-			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_S, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_T:
-		{
-			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_T, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_N:
-		{
-			momVoltage = ConversionToActualValue(VOLTAGE, MOMENTARY, PHASE_N, &Parameters, &Data);
-		}
-		break;
-	}
-	return momVoltage;
-}
-
-float STPMC1_GetMomCurrent(uint8_t phase)
-{
-	float momCurrent;
-
-	switch (phase)
-	{
-		case PHASE_R:
-		{
-			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_R, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_S:
-		{
-			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_S, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_T:
-		{
-			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_T, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_N:
-		{
-			momCurrent = ConversionToActualValue(CURRENT, MOMENTARY, PHASE_N, &Parameters, &Data);
-		}
-		break;
-	}
-	return momCurrent;
-}
-
-float STPMC1_GetRMSVoltage(uint8_t phase)
-{
-	float RMSVoltage;
-
-	switch (phase)
-	{
-		case PHASE_R:
-		{
-			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_R, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_S:
-		{
-			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_S, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_T:
-		{
-			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_T, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_N:
-		{
-			RMSVoltage = ConversionToActualValue(VOLTAGE, RMS, PHASE_N, &Parameters, &Data);
-		}
-		break;
-	}
-	return RMSVoltage;
-}
-
-float STPMC1_GetRMSCurrent(uint8_t phase)
-{
-	float RMSCurrent;
-
-	switch (phase)
-	{
-		case PHASE_R:
-		{
-			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_R, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_S:
-		{
-			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_S, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_T:
-		{
-			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_T, &Parameters, &Data);
-		}
-		break;
-
-		case PHASE_N:
-		{
-			RMSCurrent = ConversionToActualValue(CURRENT, RMS, PHASE_N, &Parameters, &Data);
-		}
-		break;
-	}
-	return RMSCurrent;
-}
-
-float ConversionToActualValue(uint8_t elecParam, uint8_t type, uint8_t phase, Parameters_t *const Parameters, Data_t *const Data)
-{
-		float actualValue;
-		float Kint = 0.815;
-		float Kdif = 0.6135;
-		uint32_t x_u;
-		uint32_t x_i;
 
 
 
-		switch (elecParam)
-		{
-		case VOLTAGE :
-		{
-			float Kdspu = Kdif * Kint;
-
-			if (type == MOMENTARY)
-			{
-				x_u = Data->momVoltage[phase];
-			}
-			else
-			{
-				x_u = Data->rmsVoltage[phase];
-			}
-			actualValue = Parameters->Kdiv * x_u
-					* Parameters->Vref
-					/ (Parameters->Kut * Parameters->Ku * Parameters->Au
-							* Parameters->len_u * Parameters->Kint_comp * Kdspu);
-		}
-			break;
-		case CURRENT :
-		{
-			float Kdspi = Kdif;
-
-			if (type == MOMENTARY)
-			{
-				x_i = Data->momCurrent[phase];
-			}
-			else
-			{
-				x_i = Data->rmsCurrent[phase];
-			}
-
-			actualValue = x_i * Parameters->Vref
-					/ (Parameters->Ks * Parameters->Ki * Parameters->Ai
-							* Parameters->len_i * Kint * Parameters->Kint_comp
-							* Kdspi);
-		}
-			break;
-		}
-		return actualValue;
-}
 
 
 /**

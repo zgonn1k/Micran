@@ -108,24 +108,22 @@ extern "C" {
 #define fMCLK					8000000
 
 
-uint8_t 			numberOfPulses;
-
-extern uint8_t		TxBuffer[BUFFER_SIZE];
-extern char			UART_TxBuffer[256];
-extern uint8_t 		byteSent;
-
+uint8_t 			number_of_pulses;
+extern volatile uint8_t		spi_tx_buffer[BUFFER_SIZE];
+extern char					UART_TxBuffer[256];
+extern volatile uint8_t 	byte_sent_flag;
 
 
+ErrorStatus spi_read_rx(SPI_TypeDef *spi, uint8_t *spi_rx_buffer, uint16_t rx_len);
 void SystemClock_Config(void);
 void TIM4_CH2_PWM_Init(void);
 void TIM2_CH1_PWM_Init(void);
 void TIM7_Init(void);
 void usDelay(uint32_t time);
-void Writing_Mode_Enable(void);
-void Writing_Mode_Disable(void);
 void Error_Handler(void);
 void SendChar(uint8_t data);
 void SendString(char array[]);
+int __io_putchar(int ch);
 
 #ifdef __cplusplus
 }

@@ -1,124 +1,120 @@
-/*
- * STPMC1.c
- *
- *  Created on: Jul 25, 2021
- *      Author: vladz
- */
 #include "STPMC1.h"
 
-uint32_t dataRegister[DATA_SIZE];
+static void writing_mode_enable(void);
+static void writing_mode_disable(void);
+static void reading_mode_enable(void);
+static void stpmc1_write_byte(enum stpmc1_config_bit address, uint8_t bit_state);
+static ErrorStatus is_parity_bad(uint8_t *byte, uint8_t grp);
 
-void STPMC1_Writing(WritingMode mode)
+void stpmc1_write(enum writing_mode mode)
 {
 	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
 
 	LL_SPI_Disable(SPI1);
 
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL5);
-
-	GPIO_InitStruct.Pin = SPI1_SCK_Pin;
-	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
-	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	LL_GPIO_SetOutputPin(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin);
+//	writing_mode_enable();
 
 	if(mode == temporary)
 	{
-		STPMC1_SendByte(RD, 1);
+		stpmc1_write_byte(RD, 1);
 		usDelay(TIME_BETWEEN_TX	);
 	}
 	else
 	{
-		STPMC1_SendByte(RD, 0);
+		stpmc1_write_byte(RD, 0);
 		usDelay(TIME_BETWEEN_TX	);
 	}
 
-	STPMC1_SendByte(TSTD, 0);		/*enable test modes and system signals*/
+	stpmc1_write_byte(TSTD, 0);		/*enable test modes and system signals*/
 	usDelay(TIME_BETWEEN_TX);
 
-	STPMC1_SendByte(MDIV, 1);	/*fMCLK = fXTAL1 = 8 MHz*/
+	stpmc1_write_byte(MDIV, 1);	/*fMCLK = fXTAL1 = 8 MHz*/
 	usDelay(TIME_BETWEEN_TX);
 
-	STPMC1_SendByte(HSA, 0);	/*fCLK = fXTAL1/4 = 2 MHz */
+	stpmc1_write_byte(HSA, 0);	/*fCLK = fXTAL1/4 = 2 MHz */
 	usDelay(TIME_BETWEEN_TX);
 
-	STPMC1_SendByte(APL_0, 0);
+	stpmc1_write_byte(APL_0, 0);
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(APL_1, 0); /*APL = 0: peripheral MOP, MON=ZCR, WatchDOG, LED=pulses (X)*/
+	stpmc1_write_byte(APL_1, 0); /*APL = 0: peripheral MOP, MON=ZCR, WatchDOG, LED=pulses (X)*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(TCS, 1);	/*Current transformer (CT) or shunt*/
+	stpmc1_write_byte(TCS, 1);	/*Current transformer (CT) or shunt*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(FRS, 0);	/*Nominal base frequency 50Hz*/
+	stpmc1_write_byte(FRS, 0);	/*Nominal base frequency 50Hz*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(FUND, 0);	/*full bandwidth active energy controls the stepper;
+	stpmc1_write_byte(FUND, 0);	/*full bandwidth active energy controls the stepper;
 						  full bandwidth reactive energy computation.*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(ART, 0);	/*natural computation*/
+	stpmc1_write_byte(ART, 0);	/*natural computation*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(MSBF, 0);	/*msb first*/
+	stpmc1_write_byte(MSBF, 0);	/*msb first*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(ABS_0, 0);
+	stpmc1_write_byte(ABS_0, 0);
 	usDelay(TIME_BETWEEN_TX	);
-	STPMC1_SendByte(ABS_1, 0);	/*LTCH=0: 0,00125 * FS,*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	STPMC1_SendByte(LTCH_0, 0);
-	usDelay(TIME_BETWEEN_TX	);
-	STPMC1_SendByte(LTCH_1, 0);	/*LTCH=0: 0,00125 * FS,*/
+	stpmc1_write_byte(ABS_1, 0);	/*LTCH=0: 0,00125 * FS,*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(KMOT_0, 1);
+	stpmc1_write_byte(LTCH_0, 0);
 	usDelay(TIME_BETWEEN_TX	);
-	STPMC1_SendByte(KMOT_1, 0);
-	usDelay(TIME_BETWEEN_TX	);
-
-	STPMC1_SendByte(SYS_0, 1);
+	stpmc1_write_byte(LTCH_1, 0);	/*LTCH=0: 0,00125 * FS,*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(SYS_1, 1);
+	stpmc1_write_byte(KMOT_0, 1);
+	usDelay(TIME_BETWEEN_TX	);
+	stpmc1_write_byte(KMOT_1, 0);
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(SYS_2, 0);	/*SYS=3: 1-phase, 2-wire __TN, 1-system __T_*/
+	stpmc1_write_byte(SYS_0, 1);
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(SCLP, 0);
+	stpmc1_write_byte(SYS_1, 1);
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(PM, 1);	/*Class 0.1*/
+	stpmc1_write_byte(SYS_2, 0);	/*SYS=3: 1-phase, 2-wire __TN, 1-system __T_*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(FR1, 0);	/*fMCLK =8.192 MHz*/
+	stpmc1_write_byte(SCLP, 0);
 	usDelay(TIME_BETWEEN_TX	);
 
-	STPMC1_SendByte(CHK, 1);	/*fMCLK =8.192 MHz*/
+	stpmc1_write_byte(PM, 1);	/*Class 0.1*/
 	usDelay(TIME_BETWEEN_TX	);
 
-	Writing_Mode_Disable();
+	stpmc1_write_byte(FR1, 0);	/*fMCLK =8.192 MHz*/
+	usDelay(TIME_BETWEEN_TX	);
+
+	stpmc1_write_byte(CHK, 1);	/*fMCLK =8.192 MHz*/
+	usDelay(TIME_BETWEEN_TX	);
+
+	writing_mode_disable();
 
 
 }
 
-void STPMC1_Reading(Data_t *Data, uint32_t *pRxBuffer)
+/*
+ErrorStatus start_spi_dma()
 {
-	LL_GPIO_InitTypeDef GPIO_InitStruct = { 0 };
-	uint8_t dataRegister_8bit[DATA_SIZE * 4];
-
-
-
 	LL_DMA_DisableStream(DMA2, LL_DMA_STREAM_0);
 	LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, sizeof(dataRegister_8bit));
 	LL_DMA_SetPeriphAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) (&SPI1->DR));
 	LL_DMA_SetMemoryAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) dataRegister_8bit);
 	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
 
-	Writing_Mode_Enable();
+	return SUCCESS;
+}
+*/
+
+void reading_mode_enable()
+{
+	LL_GPIO_InitTypeDef GPIO_InitStruct = { 0 };
+
+	writing_mode_disable();
 
 	LL_SPI_Disable(SPI1);
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
@@ -147,61 +143,65 @@ void STPMC1_Reading(Data_t *Data, uint32_t *pRxBuffer)
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
 	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+}
 
 
-	LL_SPI_Enable(SPI1);
-	uint8_t currentByte;
-	for (currentByte = 0; currentByte < DATA_SIZE * 4; currentByte++)
-	{
-		while (!(LL_SPI_IsActiveFlag_RXNE(SPI1)));
-		dataRegister_8bit[currentByte] = LL_SPI_ReceiveData8(SPI1);
-	}
-	LL_SPI_Disable(SPI1);
+
+ErrorStatus stpmc1_read(uint32_t *data_buffer)
+{
+	uint8_t spi_rx_buffer[STPMC1_RX_BUF_SIZE];
+
+	reading_mode_enable();
+
+	spi_read_rx(SPI1, spi_rx_buffer, STPMC1_RX_BUF_SIZE);
+
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
 
-
-	for (currentByte = 0; currentByte < DATA_SIZE * 4; currentByte++)
+	uint8_t i = 0;
+	for (i = 0; i < STPMC1_RX_BUF_SIZE * 4; i++)
 	{
-		printf("dataReg[%d] = %x\r\n", currentByte, dataRegister_8bit[currentByte]);
+		printf("dataReg[%d] = %x\r\n", i, spi_rx_buffer[i]);
 	}
 
-	uint8_t currentAdressOfPackage;
-	for (currentAdressOfPackage = 0; currentAdressOfPackage < DATA_SIZE; currentAdressOfPackage++)
+	for (i = 0; i < DATA_SIZE; i++)
 	{
 		uint8_t tmp;
-		tmp = dataRegister_8bit[currentAdressOfPackage * 4 + 0];
-		dataRegister_8bit[currentAdressOfPackage * 4 + 0] = dataRegister_8bit[currentAdressOfPackage * 4 + 3];
-		dataRegister_8bit[currentAdressOfPackage * 4 + 3] = tmp;
+		tmp = spi_rx_buffer[i * 4 + 0];
+		spi_rx_buffer[i * 4 + 0] = spi_rx_buffer[i * 4 + 3];
+		spi_rx_buffer[i * 4 + 3] = tmp;
 
-		tmp = dataRegister_8bit[currentAdressOfPackage * 4 + 1];
-		dataRegister_8bit[currentAdressOfPackage * 4 + 1] = dataRegister_8bit[currentAdressOfPackage * 4 + 2];
-		dataRegister_8bit[currentAdressOfPackage * 4 + 2] = tmp;
+		tmp = spi_rx_buffer[i * 4 + 1];
+		spi_rx_buffer[i * 4 + 1] = spi_rx_buffer[i * 4 + 2];
+		spi_rx_buffer[i * 4 + 2] = tmp;
 
-		pRxBuffer[currentAdressOfPackage] = dataRegister_8bit[currentAdressOfPackage * 4 + 0];
-		pRxBuffer[currentAdressOfPackage] = (pRxBuffer[currentAdressOfPackage] << 8) | dataRegister_8bit[currentAdressOfPackage * 4 + 1];
-		pRxBuffer[currentAdressOfPackage] = (pRxBuffer[currentAdressOfPackage] << 8) | dataRegister_8bit[currentAdressOfPackage * 4 + 2];
-		pRxBuffer[currentAdressOfPackage] = (pRxBuffer[currentAdressOfPackage] << 8) | dataRegister_8bit[currentAdressOfPackage * 4 + 3];
+		data_buffer[i] = spi_rx_buffer[i * 4 + 0];
+		data_buffer[i] = ((data_buffer[i] << 8) | spi_rx_buffer[i * 4 + 1]);
+		data_buffer[i] = ((data_buffer[i] << 8) | spi_rx_buffer[i * 4 + 2]);
+		data_buffer[i] = ((data_buffer[i] << 8) | spi_rx_buffer[i * 4 + 3]);
 
-		if (IsParityBad(&dataRegister_8bit[currentAdressOfPackage * 4], (currentAdressOfPackage / 4)) == SUCCESS)
+		if (is_parity_bad(&spi_rx_buffer[i * 4], (i / 4)) != SUCCESS)
 		{
-			printf("param[%d]: 0x%08X parity ok\r\n", currentAdressOfPackage, pRxBuffer[currentAdressOfPackage]);
+			printf("param[%d]: 0x%08X parity bad\r\n", i, data_buffer[i]);
 		}
 		else
 		{
-			printf("param[%d]: 0x%08X parity bad\r\n", currentAdressOfPackage, pRxBuffer[currentAdressOfPackage]);
+			printf("param[%d]: 0x%08X parity ok\r\n", i, data_buffer[i]);
 		}
 	}
+
+	return SUCCESS;
 }
 
-ErrorStatus IsParityBad(uint8_t *bp, uint8_t grp)
+ErrorStatus is_parity_bad(uint8_t *byte, uint8_t grp)
 {
 	uint8_t prty = grp;
 
-	prty ^= *bp;
-	prty ^= *(bp + 1);
-	prty ^= *(bp + 2);
-	prty ^= *(bp + 3);
+	prty ^= *byte;
+	prty ^= *(byte + 1);
+	prty ^= *(byte + 2);
+	prty ^= *(byte + 3);
 	prty ^= prty << 4;
+
 	if ((prty & 0xF0) == 0xF0)
 	{
 		return SUCCESS;
@@ -213,113 +213,147 @@ ErrorStatus IsParityBad(uint8_t *bp, uint8_t grp)
 
 }
 
-void STPMC1_DataUnpacking(Data_t *Data)
+void stpmc1_data_unpacking(struct stpmc1_data *data, uint32_t *data_buffer)
 {
-	Data->momVoltage[PHASE_R] =  ((dataRegister[DMR]&VOLTAGE_VALUES_MASK) >> 16);
-	Data->momVoltage[PHASE_S] =  ((dataRegister[DMS]&VOLTAGE_VALUES_MASK) >> 16);
-	Data->momVoltage[PHASE_T] =  ((dataRegister[DMT]&VOLTAGE_VALUES_MASK) >> 16);
+	data->momVoltage[PHASE_R] =  ((data_buffer[DMR]&VOLTAGE_MASK) >> 16);
+	data->momVoltage[PHASE_S] =  ((data_buffer[DMS]&VOLTAGE_MASK) >> 16);
+	data->momVoltage[PHASE_T] =  ((data_buffer[DMT]&VOLTAGE_MASK) >> 16);
 
-	Data->momCurrent[PHASE_R] = (dataRegister[DMR]&CURRENT_VALUES_MASK);
-	Data->momCurrent[PHASE_S] = (dataRegister[DMS]&CURRENT_VALUES_MASK);
-	Data->momCurrent[PHASE_T] = (dataRegister[DMT]&CURRENT_VALUES_MASK);
+	data->momCurrent[PHASE_R] = (data_buffer[DMR]&CURRENT_MASK);
+	data->momCurrent[PHASE_S] = (data_buffer[DMS]&CURRENT_MASK);
+	data->momCurrent[PHASE_T] = (data_buffer[DMT]&CURRENT_MASK);
 
-	Data->rmsVoltage[PHASE_R] = ((dataRegister[DER]&VOLTAGE_VALUES_MASK) >> 16);
-	Data->rmsVoltage[PHASE_S] = ((dataRegister[DES]&VOLTAGE_VALUES_MASK) >> 16);
-	Data->rmsVoltage[PHASE_T] = ((dataRegister[DET]&VOLTAGE_VALUES_MASK) >> 16);
+	data->rmsVoltage[PHASE_R] = ((data_buffer[DER]&VOLTAGE_MASK) >> 16);
+	data->rmsVoltage[PHASE_S] = ((data_buffer[DES]&VOLTAGE_MASK) >> 16);
+	data->rmsVoltage[PHASE_T] = ((data_buffer[DET]&VOLTAGE_MASK) >> 16);
 
-	Data->DC = (dataRegister[PRD])&VOLTAGE_VALUES_MASK >> 16;
-	Data->configBits[0] = (dataRegister[CF0]&CFG_MASK);
-	Data->configBits[1] = (dataRegister[CF1]&CFG_MASK);
-	Data->configBits[2] = (dataRegister[CF2]&CFG_MASK);
-	Data->configBits[3] = (dataRegister[CF3]&CFG_MASK);
+	data->DC = (data_buffer[PRD])&VOLTAGE_MASK >> 16;
+	data->configBits[0] = (data_buffer[CF0]&CFG_MASK);
+	data->configBits[1] = (data_buffer[CF1]&CFG_MASK);
+	data->configBits[2] = (data_buffer[CF2]&CFG_MASK);
+	data->configBits[3] = (data_buffer[CF3]&CFG_MASK);
 
-	Data->powerActive = (dataRegister[DAP])&ENERGY_MASK >> 8;
+	data->powerActive = (data_buffer[DAP])&ENERGY_MASK >> 8;
 }
 
-void STPMC1_SendByte(STPMC1_Config_Bit address, uint8_t bitState)
+void stpmc1_write_byte(enum stpmc1_config_bit address, uint8_t bit_state)
 {
 	uint8_t i = 0;
 	uint8_t decimal = address;
 
 	for (i = 0; i < BUFFER_SIZE - 1; i++)
-		{
-			TxBuffer[i] = decimal % 2;
-			decimal = decimal / 2;
-		}
+	{
+		spi_tx_buffer[i] = decimal % 2;
+		decimal = decimal / 2;
+	}
 
-	TxBuffer[BUFFER_SIZE - 1] = bitState;
+	spi_tx_buffer[BUFFER_SIZE - 1] = bit_state;
 
-	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
-	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
-	usDelay(1000);
-	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
-	usDelay(5);
-	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
-
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER6);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL5);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL6);
-
-	GPIOA->AFR[0] |= GPIO_AFRL_AFRL5_0; /*TIM2 CH1 for PA5*/
-	GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL5_1 | GPIO_AFRL_AFRL5_2 | GPIO_AFRL_AFRL5_3);
-	GPIOA->MODER |= GPIO_MODER_MODER5_1; /*Alternate function mode*/
-
-	LL_GPIO_SetPinMode(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin, LL_GPIO_MODE_OUTPUT);
+	writing_mode_enable();
 
 	NVIC_EnableIRQ(TIM2_IRQn);
 	TIM2->CR1 |= TIM_CR1_CEN;
 	TIM2->EGR |= TIM_EGR_UG;
 
-	while (byteSent != 1 );
-	byteSent = 0;
+	while (byte_sent_flag != 1 );
+	byte_sent_flag = 0;
 
-	usDelay(10);
+	writing_mode_disable();
+}
 
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL5);
 
-	LL_GPIO_SetPinMode(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_MODE_OUTPUT);
-	LL_GPIO_SetOutputPin(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin);
-	usDelay(10);
+void writing_mode_enable(void)
+{
+	CLEAR_BIT(GPIOA->MODER, (GPIO_MODER_MODER5 | GPIO_MODER_MODER6));
+	CLEAR_BIT(GPIOA->AFR[0], (GPIO_AFRL_AFRL5 | GPIO_AFRL_AFRL6));
+	LL_GPIO_SetAFPin_0_7(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_AF_1);
+	LL_GPIO_SetPinMode(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_MODE_ALTERNATE);
+	LL_GPIO_SetPinMode(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin, LL_GPIO_MODE_OUTPUT);
+/*
 	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
-	usDelay(10);
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
 	usDelay(100);
+*/
+	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	usDelay(5);
+	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
 }
 
-
-void Writing_Mode_Enable(void)
+void writing_mode_disable(void)
 {
-	LL_GPIO_InitTypeDef GPIO_InitStruct = { 0 };
-
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL5);
-
-	GPIO_InitStruct.Pin = SPI1_SCK_Pin;
-	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
-	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-}
-
-void Writing_Mode_Disable(void)
-{
-	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
-
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
-	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER6);
-
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL5);
-	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL6);
-
-	GPIO_InitStruct.Pin = SPI1_SCK_Pin | SPI1_MISO_Pin;
-	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
-	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
-	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
-	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
-	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
 	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	usDelay(5);
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+
+	CLEAR_BIT(GPIOA->AFR[0], (GPIO_AFRL_AFRL5 | GPIO_AFRL_AFRL6));
+	LL_GPIO_SetAFPin_0_7(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_AF_5);
+	LL_GPIO_SetAFPin_0_7(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin, LL_GPIO_AF_5);
+}
+
+float stpmc1_get_voltage(struct stpmc1_data const *const data,
+						 struct stpmc1_param const *const param, uint8_t type, uint8_t phase)
+{
+	float actualValue;
+	uint32_t x_u;
+
+	float Kdspu = param->Kdif * param->Kint;
+
+	if (type == MOMENTARY)
+	{
+		x_u = data->momVoltage[phase];
+	}
+	else
+	{
+		x_u = data->rmsVoltage[phase];
+	}
+	actualValue = param->Kdiv * x_u * param->Vref
+			/ (param->Kut * param->Ku * param->Au * param->len_u
+					* param->Kint_comp * Kdspu);
+
+	return actualValue;
+}
+
+
+float stpmc1_get_current(struct stpmc1_data const *const data,
+						 struct stpmc1_param const *const param, uint8_t type, uint8_t phase)
+{
+	float actualValue;
+	uint32_t x_i;
+
+	float Kdspi = param->Kdif;
+
+	if (type == MOMENTARY)
+	{
+		x_i = data->momCurrent[phase];
+	}
+	else
+	{
+		x_i = data->rmsCurrent[phase];
+	}
+
+	actualValue = x_i * param->Vref
+			/ (param->Ks * param->Ki * param->Ai * param->len_i * param->Kint
+					* param->Kint_comp * Kdspi);
+
+	return actualValue;
+}
+
+void stpmc1_init(struct stpmc1_param *const param)
+{
+	param->R1 = 100000;
+	param->R2 = 470;
+	param->Ku = 0.9375;
+	param->Ki = 0.9375;
+	param->Kisum = 0.875;
+	param->Au = 16;
+	param->len_i = 65536;
+	param->len_u = 4096;
+	param->len_isum = 4096;
+	param->Kint_comp = 1.004;
+	param->Fm = 4000000;
+	param->Kut = 2;
+	param->Vref = 1.23;
+	param->Kdiv = (1 + param->R1 / param->R2);
+	param->Kint = 0.815;
+	param->Kdif = 0.6135;
 }
