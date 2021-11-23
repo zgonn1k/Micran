@@ -3,53 +3,38 @@
 
 static void MX_USART2_UART_Init(void);
 static void MX_GPIO_Init(void);
-static void MX_SPI1_Init(void);
 
 volatile uint8_t  spi_tx_buffer[BUFFER_SIZE];
 volatile uint8_t  byte_sent_flag;
 char	 UART_TxBuffer[256];
 uint32_t stpmc1_data_buffer[DATA_SIZE];
-
-struct stpmc1_data stpmc1_data;
-struct stpmc1_param stpmc1_param;
+volatile uint8_t number_of_pulses;
 
 
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
 int main(void)
 {
 
-	LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
-	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+	float voltage;
 
-	/* Configure the system clock */
 	SystemClock_Config();
-
-	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
-	MX_SPI1_Init();
 	MX_USART2_UART_Init();
-	//MX_DMA_Init();
 	TIM7_Init();
 	TIM2_CH1_PWM_Init();
 	TIM4_CH2_PWM_Init();
 
+	stpmc1_init();
 
-	stpmc1_init(&stpmc1_param);
-	stpmc1_write(temporary);
-
-	LL_mDelay(100);
+	LL_mDelay(10);
 
 	while (1)
 	{
 		stpmc1_read(stpmc1_data_buffer);
-		stpmc1_data_unpacking(&stpmc1_data, stpmc1_data_buffer);
 
-		stpmc1_get_voltage(&stpmc1_data, &stpmc1_param, RMS, PHASE_R);
-		stpmc1_get_voltage(&stpmc1_data, &stpmc1_param, MOMENTARY, PHASE_R);
+		voltage = stpmc1_get_voltage(RMS, PHASE_R);
+		printf("RMS Voltage = %f[V]\r\n", voltage);
+		voltage = stpmc1_get_voltage(MOMENTARY, PHASE_R);
+		printf("Momentary Voltage = %f[V]\r\n", voltage);
 
 		LL_mDelay(100);
 	}
@@ -64,6 +49,9 @@ int __io_putchar(int ch)
 
 void SystemClock_Config(void)
 {
+	LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SYSCFG);
+	LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_PWR);
+
 	LL_FLASH_SetLatency(LL_FLASH_LATENCY_5);
 	while (LL_FLASH_GetLatency() != LL_FLASH_LATENCY_5)
 	{
@@ -101,92 +89,8 @@ void SystemClock_Config(void)
   * @param None
   * @retval None
   */
-static void MX_SPI1_Init(void)
-{
-	LL_SPI_InitTypeDef SPI_InitStruct =	{ 0 };
-
-	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
-
-	LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_SPI1);
-
-	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
-	/**SPI1 GPIO Configuration
-	 PA5   ------> SPI1_SCK
-	 PA6   ------> SPI1_MISO
-	 */
-	GPIO_InitStruct.Pin = SPI1_SCK_Pin | SPI1_MISO_Pin;
-	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
-	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
-	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
-	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
-	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-	/* SPI1 parameter configuration*/
-	SPI_InitStruct.TransferDirection = LL_SPI_SIMPLEX_RX;
-	SPI_InitStruct.Mode = LL_SPI_MODE_MASTER;
-	SPI_InitStruct.DataWidth = LL_SPI_DATAWIDTH_8BIT;
-	SPI_InitStruct.ClockPolarity = LL_SPI_POLARITY_HIGH;
-	SPI_InitStruct.ClockPhase = LL_SPI_PHASE_2EDGE;
-	SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
-	SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV64;    /* 2,5 MBits/s */
-	SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
-	SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
-	LL_SPI_Init(SPI1, &SPI_InitStruct);
-	LL_SPI_EnableDMAReq_RX(SPI1);
 
 
-
-}
-
-ErrorStatus spi_read_rx(SPI_TypeDef *spi, uint8_t *spi_rx_buffer, uint16_t rx_len)
-{
-	LL_SPI_Enable(spi);
-
-	for (uint8_t i = 0; i < rx_len; i++)
-	{
-		while (!(LL_SPI_IsActiveFlag_RXNE(spi)));
-		spi_rx_buffer[i] = LL_SPI_ReceiveData8(spi);
-	}
-	LL_SPI_Disable(SPI1);
-
-	return SUCCESS;
-}
-
-/*
-static void MX_DMA_Init(void)
-{
-
-	LL_DMA_InitTypeDef DMA_InitStruct =	{ 0 };
-
-	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_DMA2);
-
-	DMA_InitStruct.Channel = LL_DMA_CHANNEL_3;
-	DMA_InitStruct.Direction = LL_DMA_DIRECTION_PERIPH_TO_MEMORY;
-	DMA_InitStruct.FIFOMode = LL_DMA_FIFOMODE_DISABLE;
-	DMA_InitStruct.MemBurst = LL_DMA_MBURST_SINGLE;
-	DMA_InitStruct.MemoryOrM2MDstAddress = (uint32_t)dataRegister_8bit;
-	DMA_InitStruct.MemoryOrM2MDstDataSize = sizeof(dataRegister_8bit);
-	DMA_InitStruct.MemoryOrM2MDstIncMode = LL_DMA_MEMORY_INCREMENT;
-	DMA_InitStruct.Mode = LL_DMA_MODE_NORMAL;
-	DMA_InitStruct.NbData = sizeof(dataRegister_8bit);
-	DMA_InitStruct.PeriphBurst = LL_DMA_PBURST_SINGLE;
-	DMA_InitStruct.PeriphOrM2MSrcAddress = (uint32_t)(&SPI1->DR);
-	DMA_InitStruct.PeriphOrM2MSrcDataSize = sizeof(uint8_t);
-	DMA_InitStruct.PeriphOrM2MSrcIncMode = LL_DMA_PERIPH_NOINCREMENT;
-	DMA_InitStruct.Priority = LL_DMA_PRIORITY_MEDIUM;
-	LL_DMA_Init(DMA2, LL_DMA_STREAM_0, &DMA_InitStruct);
-
-	//NVIC_SetPriority(DMA2_Stream0_IRQn,
-	//NVIC_EncodePriority(NVIC_GetPriorityGrouping(), 0, 0));
-	//NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-}
-
-/**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
 
 static void MX_GPIO_Init(void)
 {
@@ -198,19 +102,19 @@ static void MX_GPIO_Init(void)
 	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOD);
 
 
-	GPIO_InitStruct.Pin = SPI1_SYN_Pin;
+	GPIO_InitStruct.Pin = SPI_SYN_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-	LL_GPIO_Init(SPI1_SYN_GPIO_Port, &GPIO_InitStruct);
+	LL_GPIO_Init(SPI_SYN_GPIO_Port, &GPIO_InitStruct);
 
-	GPIO_InitStruct.Pin = SPI1_SS_Pin;
+	GPIO_InitStruct.Pin = SPI_SS_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
-	LL_GPIO_Init(SPI1_SS_GPIO_Port, &GPIO_InitStruct);
+	LL_GPIO_Init(SPI_SS_GPIO_Port, &GPIO_InitStruct);
 
 	GPIO_InitStruct.Pin = LL_GPIO_PIN_15 | LL_GPIO_PIN_14 | LL_GPIO_PIN_12;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
@@ -219,8 +123,16 @@ static void MX_GPIO_Init(void)
 	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
 	LL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
-	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	GPIO_InitStruct.Pin = SPI_SCK_Pin | SPI_MISO_Pin;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
+	LL_GPIO_Init(SPI_SCK_GPIO_Port, &GPIO_InitStruct);
+
+	LL_GPIO_SetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
 
 }
 

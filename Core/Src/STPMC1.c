@@ -1,114 +1,84 @@
 #include "STPMC1.h"
 
+#define STPMC1_SET_REG(REG, VAL)	(VAL == 1) ? (REG | (1 << 7)) : (REG &~(1 << 7))
+
 static void writing_mode_enable(void);
 static void writing_mode_disable(void);
 static void reading_mode_enable(void);
-static void stpmc1_write_byte(enum stpmc1_config_bit address, uint8_t bit_state);
+static void stpmc1_write_reg(uint8_t *reg);
 static ErrorStatus is_parity_bad(uint8_t *byte, uint8_t grp);
+static void stpmc1_spi_init(void);
+static ErrorStatus spi_receive(SPI_TypeDef *spip, uint8_t *rx_buf, size_t buf_size);
 
-void stpmc1_write(enum writing_mode mode)
+uint8_t stpmc1_data_buf[28];
+
+static struct stpmc1_data stpmc1_data;
+
+const struct stpmc1_cfg stpmc1_cfg =
 {
-	LL_GPIO_InitTypeDef GPIO_InitStruct =	{ 0 };
+		.R1 = 100000,
+		.R2 = 470,
+		.Ku = 0.9375,
+		.Ki = 0.9375,
+		.Kisum = 0.875,
+		.Au = 16,
+		.len_i = 65536,
+		.len_u = 4096,
+		.len_isum = 4096,
+		.Kint_comp = 1.004,
+		.Fm = 4000000,
+		.Kut = 2,
+		.Vref = 1.23,
+		.Kint = 0.815,
+		.Kdif = 0.6135,
+};
 
-	LL_SPI_Disable(SPI1);
 
-//	writing_mode_enable();
 
-	if(mode == temporary)
+void stpmc1_init()
+{
+	uint8_t stpmc1_cfg_reg[] =
 	{
-		stpmc1_write_byte(RD, 1);
-		usDelay(TIME_BETWEEN_TX	);
-	}
-	else
+
+		STPMC1_SET_REG(RD, 1),
+		STPMC1_SET_REG(TSTD, 0), /*enable test modes and system signals*/
+		STPMC1_SET_REG(MDIV, 1), /*fMCLK = fXTAL1 = 8 MHz*/
+		STPMC1_SET_REG(HSA, 0), /*fCLK = fXTAL1/4 = 2 MHz */
+		STPMC1_SET_REG(APL_0, 0), /*APL = 0: peripheral MOP, MON=ZCR, WatchDOG, LED=pulses (X)*/
+		STPMC1_SET_REG(APL_1, 0),
+		STPMC1_SET_REG(TCS, 1), /*Current transformer (CT) or shunt*/
+		STPMC1_SET_REG(FRS, 0), /*Nominal base frequency 50Hz*/
+		STPMC1_SET_REG(FUND, 0),
+		STPMC1_SET_REG(ART, 0), /*natural computation*/
+		STPMC1_SET_REG(MSBF, 0), /*msb first*/
+		STPMC1_SET_REG(ABS_0, 0),
+		STPMC1_SET_REG(ABS_1, 0),
+		STPMC1_SET_REG(LTCH_0, 0), /*LTCH=0: 0,00125 * FS,*/
+		STPMC1_SET_REG(LTCH_1, 0),
+		STPMC1_SET_REG(KMOT_0, 1),
+		STPMC1_SET_REG(KMOT_1, 1),
+		STPMC1_SET_REG(KMOT_0, 1),
+		STPMC1_SET_REG(SYS_0, 1), /*SYS=3: 1-phase, 2-wire __TN, 1-system __T_*/
+		STPMC1_SET_REG(SYS_1, 1),
+		STPMC1_SET_REG(SYS_2, 0),
+		STPMC1_SET_REG(SCLP, 0),
+		STPMC1_SET_REG(PM, 1), /*Class 0.1*/
+		STPMC1_SET_REG(FR1, 0), /*fMCLK =8.192 MHz*/
+		STPMC1_SET_REG(CHK, 1) /*fMCLK =8.192 MHz*/
+	};
+
+	stpmc1_spi_init();
+
+
+	writing_mode_enable();
+
+	for(uint8_t i = 0; i < sizeof(stpmc1_cfg_reg); i++)
 	{
-		stpmc1_write_byte(RD, 0);
-		usDelay(TIME_BETWEEN_TX	);
+		stpmc1_write_reg(&stpmc1_cfg_reg[i]);
+		usDelay(TIME_BETWEEN_TX);
 	}
-
-	stpmc1_write_byte(TSTD, 0);		/*enable test modes and system signals*/
-	usDelay(TIME_BETWEEN_TX);
-
-	stpmc1_write_byte(MDIV, 1);	/*fMCLK = fXTAL1 = 8 MHz*/
-	usDelay(TIME_BETWEEN_TX);
-
-	stpmc1_write_byte(HSA, 0);	/*fCLK = fXTAL1/4 = 2 MHz */
-	usDelay(TIME_BETWEEN_TX);
-
-	stpmc1_write_byte(APL_0, 0);
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(APL_1, 0); /*APL = 0: peripheral MOP, MON=ZCR, WatchDOG, LED=pulses (X)*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(TCS, 1);	/*Current transformer (CT) or shunt*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(FRS, 0);	/*Nominal base frequency 50Hz*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(FUND, 0);	/*full bandwidth active energy controls the stepper;
-						  full bandwidth reactive energy computation.*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(ART, 0);	/*natural computation*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(MSBF, 0);	/*msb first*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(ABS_0, 0);
-	usDelay(TIME_BETWEEN_TX	);
-	stpmc1_write_byte(ABS_1, 0);	/*LTCH=0: 0,00125 * FS,*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(LTCH_0, 0);
-	usDelay(TIME_BETWEEN_TX	);
-	stpmc1_write_byte(LTCH_1, 0);	/*LTCH=0: 0,00125 * FS,*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(KMOT_0, 1);
-	usDelay(TIME_BETWEEN_TX	);
-	stpmc1_write_byte(KMOT_1, 0);
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(SYS_0, 1);
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(SYS_1, 1);
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(SYS_2, 0);	/*SYS=3: 1-phase, 2-wire __TN, 1-system __T_*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(SCLP, 0);
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(PM, 1);	/*Class 0.1*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(FR1, 0);	/*fMCLK =8.192 MHz*/
-	usDelay(TIME_BETWEEN_TX	);
-
-	stpmc1_write_byte(CHK, 1);	/*fMCLK =8.192 MHz*/
-	usDelay(TIME_BETWEEN_TX	);
-
 	writing_mode_disable();
-
-
 }
-
-/*
-ErrorStatus start_spi_dma()
-{
-	LL_DMA_DisableStream(DMA2, LL_DMA_STREAM_0);
-	LL_DMA_SetDataLength(DMA2, LL_DMA_STREAM_0, sizeof(dataRegister_8bit));
-	LL_DMA_SetPeriphAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) (&SPI1->DR));
-	LL_DMA_SetMemoryAddress(DMA2, LL_DMA_STREAM_0, (uint32_t) dataRegister_8bit);
-	LL_DMA_EnableStream(DMA2, LL_DMA_STREAM_0);
-
-	return SUCCESS;
-}
-*/
 
 void reading_mode_enable()
 {
@@ -116,18 +86,18 @@ void reading_mode_enable()
 
 	writing_mode_disable();
 
-	LL_SPI_Disable(SPI1);
-	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
-	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_SPI_Disable(STPMC1_SPI);
+	LL_GPIO_SetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
+	LL_GPIO_ResetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 	usDelay(2);
-	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 	usDelay(1);
-	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
-	LL_GPIO_SetOutputPin(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin);
+	LL_GPIO_ResetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
+	LL_GPIO_SetOutputPin(SPI_SCK_GPIO_Port, SPI_SCK_Pin);
 	usDelay(1);
-	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_ResetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 	usDelay(1);
-	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 
 	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER5);
 	CLEAR_BIT(GPIOA->MODER, GPIO_MODER_MODER6);
@@ -136,7 +106,7 @@ void reading_mode_enable()
 	CLEAR_BIT(GPIOA->AFR[0], GPIO_AFRL_AFRL6);
 
 	/**/
-	GPIO_InitStruct.Pin = SPI1_SCK_Pin | SPI1_MISO_Pin;
+	GPIO_InitStruct.Pin = SPI_SCK_Pin | SPI_MISO_Pin;
 	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
 	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
 	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
@@ -153,12 +123,12 @@ ErrorStatus stpmc1_read(uint32_t *data_buffer)
 
 	reading_mode_enable();
 
-	spi_read_rx(SPI1, spi_rx_buffer, STPMC1_RX_BUF_SIZE);
+	spi_receive(STPMC1_SPI, spi_rx_buffer, STPMC1_RX_BUF_SIZE);
 
-	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	LL_GPIO_SetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
 
 	uint8_t i = 0;
-	for (i = 0; i < STPMC1_RX_BUF_SIZE * 4; i++)
+	for (i = 0; i < STPMC1_RX_BUF_SIZE; i++)
 	{
 		printf("dataReg[%d] = %x\r\n", i, spi_rx_buffer[i]);
 	}
@@ -181,11 +151,11 @@ ErrorStatus stpmc1_read(uint32_t *data_buffer)
 
 		if (is_parity_bad(&spi_rx_buffer[i * 4], (i / 4)) != SUCCESS)
 		{
-			printf("param[%d]: 0x%08X parity bad\r\n", i, data_buffer[i]);
+			printf("param[%d]: 0x%08X parity is bad\r\n", i, data_buffer[i]);
 		}
 		else
 		{
-			printf("param[%d]: 0x%08X parity ok\r\n", i, data_buffer[i]);
+			printf("param[%d]: 0x%08X parity is ok\r\n", i, data_buffer[i]);
 		}
 	}
 
@@ -213,41 +183,16 @@ ErrorStatus is_parity_bad(uint8_t *byte, uint8_t grp)
 
 }
 
-void stpmc1_data_unpacking(struct stpmc1_data *data, uint32_t *data_buffer)
-{
-	data->momVoltage[PHASE_R] =  ((data_buffer[DMR]&VOLTAGE_MASK) >> 16);
-	data->momVoltage[PHASE_S] =  ((data_buffer[DMS]&VOLTAGE_MASK) >> 16);
-	data->momVoltage[PHASE_T] =  ((data_buffer[DMT]&VOLTAGE_MASK) >> 16);
-
-	data->momCurrent[PHASE_R] = (data_buffer[DMR]&CURRENT_MASK);
-	data->momCurrent[PHASE_S] = (data_buffer[DMS]&CURRENT_MASK);
-	data->momCurrent[PHASE_T] = (data_buffer[DMT]&CURRENT_MASK);
-
-	data->rmsVoltage[PHASE_R] = ((data_buffer[DER]&VOLTAGE_MASK) >> 16);
-	data->rmsVoltage[PHASE_S] = ((data_buffer[DES]&VOLTAGE_MASK) >> 16);
-	data->rmsVoltage[PHASE_T] = ((data_buffer[DET]&VOLTAGE_MASK) >> 16);
-
-	data->DC = (data_buffer[PRD])&VOLTAGE_MASK >> 16;
-	data->configBits[0] = (data_buffer[CF0]&CFG_MASK);
-	data->configBits[1] = (data_buffer[CF1]&CFG_MASK);
-	data->configBits[2] = (data_buffer[CF2]&CFG_MASK);
-	data->configBits[3] = (data_buffer[CF3]&CFG_MASK);
-
-	data->powerActive = (data_buffer[DAP])&ENERGY_MASK >> 8;
-}
-
-void stpmc1_write_byte(enum stpmc1_config_bit address, uint8_t bit_state)
+void stpmc1_write_reg(uint8_t *reg)
 {
 	uint8_t i = 0;
-	uint8_t decimal = address;
+	uint8_t decimal = *reg;
 
-	for (i = 0; i < BUFFER_SIZE - 1; i++)
+	for (i = 0; i < BUFFER_SIZE; i++)
 	{
 		spi_tx_buffer[i] = decimal % 2;
 		decimal = decimal / 2;
 	}
-
-	spi_tx_buffer[BUFFER_SIZE - 1] = bit_state;
 
 	writing_mode_enable();
 
@@ -266,94 +211,133 @@ void writing_mode_enable(void)
 {
 	CLEAR_BIT(GPIOA->MODER, (GPIO_MODER_MODER5 | GPIO_MODER_MODER6));
 	CLEAR_BIT(GPIOA->AFR[0], (GPIO_AFRL_AFRL5 | GPIO_AFRL_AFRL6));
-	LL_GPIO_SetAFPin_0_7(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_AF_1);
-	LL_GPIO_SetPinMode(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_MODE_ALTERNATE);
-	LL_GPIO_SetPinMode(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin, LL_GPIO_MODE_OUTPUT);
+	LL_GPIO_SetAFPin_0_7(SPI_SCK_GPIO_Port, SPI_SCK_Pin, LL_GPIO_AF_1);
+	LL_GPIO_SetPinMode(SPI_SCK_GPIO_Port, SPI_SCK_Pin, LL_GPIO_MODE_ALTERNATE);
+	LL_GPIO_SetPinMode(SPI_MISO_GPIO_Port, SPI_MISO_Pin, LL_GPIO_MODE_OUTPUT);
 /*
 	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
 	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
 	usDelay(100);
 */
-	LL_GPIO_ResetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	LL_GPIO_ResetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
 	usDelay(5);
-	LL_GPIO_ResetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_ResetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 }
 
 void writing_mode_disable(void)
 {
-	LL_GPIO_SetOutputPin(SPI1_SYN_GPIO_Port, SPI1_SYN_Pin);
+	LL_GPIO_SetOutputPin(SPI_SYN_GPIO_Port, SPI_SYN_Pin);
 	usDelay(5);
-	LL_GPIO_SetOutputPin(SPI1_SS_GPIO_Port, SPI1_SS_Pin);
+	LL_GPIO_SetOutputPin(SPI_SS_GPIO_Port, SPI_SS_Pin);
 
 	CLEAR_BIT(GPIOA->AFR[0], (GPIO_AFRL_AFRL5 | GPIO_AFRL_AFRL6));
-	LL_GPIO_SetAFPin_0_7(SPI1_SCK_GPIO_Port, SPI1_SCK_Pin, LL_GPIO_AF_5);
-	LL_GPIO_SetAFPin_0_7(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin, LL_GPIO_AF_5);
+	LL_GPIO_SetAFPin_0_7(SPI_SCK_GPIO_Port, SPI_SCK_Pin, LL_GPIO_AF_5);
+	LL_GPIO_SetAFPin_0_7(SPI_MISO_GPIO_Port, SPI_MISO_Pin, LL_GPIO_AF_5);
 }
 
-float stpmc1_get_voltage(struct stpmc1_data const *const data,
-						 struct stpmc1_param const *const param, uint8_t type, uint8_t phase)
+float stpmc1_get_voltage(uint8_t type, uint8_t phase)
 {
-	float actualValue;
+	float actual_value;
 	uint32_t x_u;
 
-	float Kdspu = param->Kdif * param->Kint;
+	float Kdspu = stpmc1_cfg.Kdif * stpmc1_cfg.Kint;
 
 	if (type == MOMENTARY)
 	{
-		x_u = data->momVoltage[phase];
+		stpmc1_data.mom_vol[phase] =  ((stpmc1_data_buf[phase + 4]&VOLTAGE_MASK) >> 16);
+		x_u = stpmc1_data.mom_vol[phase];
+
 	}
 	else
 	{
-		x_u = data->rmsVoltage[phase];
+		stpmc1_data.rms_vol[phase] = ((stpmc1_data_buf[phase + 8]&VOLTAGE_MASK) >> 16);
+		x_u = stpmc1_data.rms_vol[phase];
 	}
-	actualValue = param->Kdiv * x_u * param->Vref
-			/ (param->Kut * param->Ku * param->Au * param->len_u
-					* param->Kint_comp * Kdspu);
+	actual_value = stpmc1_cfg.Kdiv * x_u * stpmc1_cfg.Vref
+			/ (stpmc1_cfg.Kut * stpmc1_cfg.Ku * stpmc1_cfg.Au * stpmc1_cfg.len_u
+					* stpmc1_cfg.Kint_comp * Kdspu);
 
-	return actualValue;
+	return actual_value;
 }
 
 
-float stpmc1_get_current(struct stpmc1_data const *const data,
-						 struct stpmc1_param const *const param, uint8_t type, uint8_t phase)
+float stpmc1_get_current(uint8_t type, uint8_t phase)
 {
-	float actualValue;
+	float actual_value;
 	uint32_t x_i;
 
-	float Kdspi = param->Kdif;
+	float Kdspi = stpmc1_cfg.Kdif;
 
 	if (type == MOMENTARY)
 	{
-		x_i = data->momCurrent[phase];
+		stpmc1_data.mom_cur[phase] = (stpmc1_data_buf[phase + 4]&CURRENT_MASK);
+		x_i = stpmc1_data.mom_cur[phase];
 	}
 	else
 	{
-		x_i = data->rmsCurrent[phase];
+		stpmc1_data.rms_cur[phase] = (stpmc1_data_buf[phase + 8]&CURRENT_MASK);
+		x_i = stpmc1_data.rms_cur[phase];
 	}
 
-	actualValue = x_i * param->Vref
-			/ (param->Ks * param->Ki * param->Ai * param->len_i * param->Kint
-					* param->Kint_comp * Kdspi);
+	actual_value = x_i * stpmc1_cfg.Vref
+			/ (stpmc1_cfg.Ks * stpmc1_cfg.Ki * stpmc1_cfg.Ai * stpmc1_cfg.len_i * stpmc1_cfg.Kint
+					* stpmc1_cfg.Kint_comp * Kdspi);
 
-	return actualValue;
+	return actual_value;
 }
 
-void stpmc1_init(struct stpmc1_param *const param)
+static void stpmc1_spi_init(void)
 {
-	param->R1 = 100000;
-	param->R2 = 470;
-	param->Ku = 0.9375;
-	param->Ki = 0.9375;
-	param->Kisum = 0.875;
-	param->Au = 16;
-	param->len_i = 65536;
-	param->len_u = 4096;
-	param->len_isum = 4096;
-	param->Kint_comp = 1.004;
-	param->Fm = 4000000;
-	param->Kut = 2;
-	param->Vref = 1.23;
-	param->Kdiv = (1 + param->R1 / param->R2);
-	param->Kint = 0.815;
-	param->Kdif = 0.6135;
+	LL_SPI_InitTypeDef SPI_InitStruct =	{ 0 };
+
+	LL_GPIO_InitTypeDef GPIO_InitStruct = { 0 };
+
+	LL_APB2_GRP1_EnableClock(SPI_BUS);
+
+	LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOA);
+	/**SPI1 GPIO Configuration
+	 PA5   ------> SPI1_SCK
+	 PA6   ------> SPI1_MISO
+	 */
+	GPIO_InitStruct.Pin = SPI_SCK_Pin | SPI_MISO_Pin;
+	GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+	GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+	GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+	GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+	GPIO_InitStruct.Alternate = LL_GPIO_AF_5;
+	LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+	/* SPI1 parameter configuration*/
+	SPI_InitStruct.TransferDirection = LL_SPI_SIMPLEX_RX;
+	SPI_InitStruct.Mode = LL_SPI_MODE_MASTER;
+	SPI_InitStruct.DataWidth = LL_SPI_DATAWIDTH_8BIT;
+	SPI_InitStruct.ClockPolarity = LL_SPI_POLARITY_HIGH;
+	SPI_InitStruct.ClockPhase = LL_SPI_PHASE_2EDGE;
+	SPI_InitStruct.NSS = LL_SPI_NSS_SOFT;
+	SPI_InitStruct.BaudRate = LL_SPI_BAUDRATEPRESCALER_DIV64; /* 2,5 MBits/s */
+	SPI_InitStruct.BitOrder = LL_SPI_MSB_FIRST;
+	SPI_InitStruct.CRCCalculation = LL_SPI_CRCCALCULATION_DISABLE;
+	LL_SPI_Init(STPMC1_SPI, &SPI_InitStruct);
+}
+
+static ErrorStatus spi_receive(SPI_TypeDef *spip, uint8_t *rx_buf, size_t buf_size)
+{
+	ErrorStatus status;
+
+
+	if ((rx_buf == NULL) || (buf_size == 0U))
+	{
+		status = ERROR;
+	}
+
+	LL_SPI_Enable(spip);
+
+	for (uint8_t i = 0; i < buf_size; i++)
+	{
+		while (!(LL_SPI_IsActiveFlag_RXNE(spip)));
+		rx_buf[i] = LL_SPI_ReceiveData8(spip);
+	}
+	LL_SPI_Disable(spip);
+
+	return status;
 }

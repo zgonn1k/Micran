@@ -204,11 +204,11 @@ void TIM2_IRQHandler(void)
 
 		if (spi_tx_buffer[BUFFER_SIZE - number_of_pulses] == 0)
 		{
-			LL_GPIO_ResetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
+			LL_GPIO_ResetOutputPin(SPI_MISO_GPIO_Port, SPI_MISO_Pin);
 		}
 		else
 		{
-			LL_GPIO_SetOutputPin(SPI1_MISO_GPIO_Port, SPI1_MISO_Pin);
+			LL_GPIO_SetOutputPin(SPI_MISO_GPIO_Port, SPI_MISO_Pin);
 		}
 	}
 

@@ -79,14 +79,7 @@ extern "C" {
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define SPI1_SCK_Pin 			LL_GPIO_PIN_5
-#define SPI1_SCK_GPIO_Port 		GPIOA
-#define SPI1_MISO_Pin 			LL_GPIO_PIN_6
-#define SPI1_MISO_GPIO_Port 	GPIOA
-#define SPI1_SYN_Pin 			LL_GPIO_PIN_4
-#define SPI1_SYN_GPIO_Port 		GPIOC
-#define SPI1_SS_Pin 			LL_GPIO_PIN_4
-#define SPI1_SS_GPIO_Port 		GPIOA
+
 
 #ifndef NVIC_PRIORITYGROUP_0
 #define NVIC_PRIORITYGROUP_0         ((uint32_t)0x00000007) /*!< 0 bit  for pre-emption priority,
@@ -108,10 +101,11 @@ extern "C" {
 #define fMCLK					8000000
 
 
-uint8_t 			number_of_pulses;
+
 extern volatile uint8_t		spi_tx_buffer[BUFFER_SIZE];
 extern char					UART_TxBuffer[256];
 extern volatile uint8_t 	byte_sent_flag;
+extern volatile uint8_t 	number_of_pulses;
 
 
 ErrorStatus spi_read_rx(SPI_TypeDef *spi, uint8_t *spi_rx_buffer, uint16_t rx_len);
