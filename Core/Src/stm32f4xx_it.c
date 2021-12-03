@@ -1,24 +1,4 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file    stm32f4xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
@@ -42,6 +22,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
+
+
 
 /* USER CODE END PV */
 
@@ -199,6 +181,50 @@ void SysTick_Handler(void)
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
 
+/**
+  * @brief This function handles TIM2 global interrupt.
+  */
+void TIM2_IRQHandler(void)
+{
+	TIM2->SR &= ~TIM_SR_UIF;
+	number_of_pulses++;
+
+	if (number_of_pulses == 9)
+	{
+		TIM2->CR1 &= ~TIM_CR1_CEN;
+		NVIC_DisableIRQ(TIM2_IRQn);
+		byte_sent_flag = 1;
+		number_of_pulses = 0;
+
+
+	}
+
+	else
+	{
+
+		if (spi_tx_buffer[BUFFER_SIZE - number_of_pulses] == 0)
+		{
+			LL_GPIO_ResetOutputPin(SPI_MISO_GPIO_Port, SPI_MISO_Pin);
+		}
+		else
+		{
+			LL_GPIO_SetOutputPin(SPI_MISO_GPIO_Port, SPI_MISO_Pin);
+		}
+	}
+
+}
+
+/*
+void TIM7_IRQHandler(void)
+{
+	currTick++;
+	TIM7->SR &= ~TIM_SR_UIF;
+}
+*/
+void USART2_IRQHandler(void)
+{
+
+}
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */

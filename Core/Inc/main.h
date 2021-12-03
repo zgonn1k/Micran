@@ -39,6 +39,11 @@ extern "C" {
 #include "stm32f4xx_ll_spi.h"
 #include "stm32f4xx_ll_tim.h"
 #include "stm32f4xx_ll_gpio.h"
+#include "stm32f4xx_ll_usart.h"
+#include <string.h>
+#include <stdio.h>
+#include "STPMC1.h"
+
 
 #if defined(USE_FULL_ASSERT)
 #include "stm32_assert.h"
@@ -65,21 +70,17 @@ extern "C" {
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
-void Error_Handler(void);
+
+
+
 
 /* USER CODE BEGIN EFP */
 
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define SPI1_SCK_Pin LL_GPIO_PIN_5
-#define SPI1_SCK_GPIO_Port GPIOA
-#define SPI1_MISO_Pin LL_GPIO_PIN_6
-#define SPI1_MISO_GPIO_Port GPIOA
-#define SYN_Pin LL_GPIO_PIN_7
-#define SYN_GPIO_Port GPIOA
-#define SPI1_SS_Pin LL_GPIO_PIN_4
-#define SPI1_SS_GPIO_Port GPIOC
+
+
 #ifndef NVIC_PRIORITYGROUP_0
 #define NVIC_PRIORITYGROUP_0         ((uint32_t)0x00000007) /*!< 0 bit  for pre-emption priority,
                                                                  4 bits for subpriority */
@@ -94,8 +95,29 @@ void Error_Handler(void);
 #endif
 /* USER CODE BEGIN Private defines */
 
+#define PERIOD_TIME 			(uint32_t)1000000
+#define	BUFFER_SIZE				(uint8_t)8
+#define DATA_SIZE				28
+#define fMCLK					8000000
 
-/* USER CODE END Private defines */
+
+
+extern volatile uint8_t		spi_tx_buffer[BUFFER_SIZE];
+extern char					UART_TxBuffer[256];
+extern volatile uint8_t 	byte_sent_flag;
+extern volatile uint8_t 	number_of_pulses;
+
+
+ErrorStatus spi_read_rx(SPI_TypeDef *spi, uint8_t *spi_rx_buffer, uint16_t rx_len);
+void SystemClock_Config(void);
+void TIM4_CH2_PWM_Init(void);
+void TIM2_CH1_PWM_Init(void);
+void TIM7_Init(void);
+void usDelay(uint32_t time);
+void Error_Handler(void);
+void SendChar(uint8_t data);
+void SendString(char array[]);
+int __io_putchar(int ch);
 
 #ifdef __cplusplus
 }
